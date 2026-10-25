@@ -16,6 +16,7 @@
 /flatpak-repo/
 /.flatpak-builder/
 /native/target/
+/wr-capture/target/
 /target/
 *.flatpak
 *.flatpakrepo
