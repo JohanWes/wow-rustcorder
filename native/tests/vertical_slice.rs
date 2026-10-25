@@ -8,6 +8,8 @@
 //! coordinator core is stepped with `tick()`, so no test sleeps or timing
 //! assertions are needed.
 
+#![cfg(unix)]
+
 use std::fs;
 use std::io::Write;
 use std::num::NonZeroU64;

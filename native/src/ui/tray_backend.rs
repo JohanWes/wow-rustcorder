@@ -35,7 +35,6 @@ struct RecorderTray {
     /// otherwise never seen.
     wake: Arc<dyn Fn() + Send + Sync>,
     title: String,
-    status: ksni::Status,
     icons: Vec<ksni::Icon>,
 }
 
@@ -52,7 +51,6 @@ impl TrayBackend {
             quit_requested: Arc::clone(&quit_requested),
             wake,
             title: "Warcraft Recorder".into(),
-            status: ksni::Status::Active,
             icons: tray_icons(),
         };
 
@@ -81,12 +79,9 @@ impl TrayBackend {
         self.quit_requested.load(Ordering::Acquire)
     }
 
-    pub fn update(&self, title: impl Into<String>, status: ksni::Status) {
+    pub fn update(&self, title: impl Into<String>) {
         let title = title.into();
-        self.handle.update(move |tray| {
-            tray.title = title;
-            tray.status = status;
-        });
+        self.handle.update(move |tray| tray.title = title);
     }
 
     pub fn shutdown(&self) {
@@ -148,10 +143,6 @@ impl ksni::Tray for RecorderTray {
 
     fn title(&self) -> String {
         self.title.clone()
-    }
-
-    fn status(&self) -> ksni::Status {
-        self.status
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {

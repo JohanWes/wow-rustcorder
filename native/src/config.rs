@@ -602,6 +602,11 @@ fn write_atomic(config: &Config, path: &Path) -> Result<(), ConfigError> {
             path: path.to_owned(),
             source,
         })?;
+        // Windows cannot open a directory as a file; its rename is durable
+        // enough without the extra sync.
+        if cfg!(windows) {
+            return Ok(());
+        }
         File::open(parent)
             .and_then(|directory| directory.sync_all())
             .map_err(|source| ConfigError::Io {
@@ -618,6 +623,9 @@ fn write_atomic(config: &Config, path: &Path) -> Result<(), ConfigError> {
 }
 
 pub fn config_path_from_environment() -> Result<PathBuf, ConfigError> {
+    #[cfg(windows)]
+    return config_path_from_values(env::var_os("APPDATA"), None);
+    #[cfg(not(windows))]
     config_path_from_values(env::var_os("XDG_CONFIG_HOME"), env::var_os("HOME"))
 }
 

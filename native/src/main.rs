@@ -13,6 +13,8 @@ use std::sync::{Arc, mpsc};
 use warcraft_recorder::config::Config;
 use warcraft_recorder::coordinator;
 
+#[cfg(windows)]
+mod clapper_stubs;
 mod ui;
 
 use ui::tray_backend::TrayBackend;

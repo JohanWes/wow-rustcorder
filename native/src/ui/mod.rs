@@ -20,6 +20,10 @@ pub mod settings;
 pub mod sidebar;
 pub mod status;
 pub mod timeline;
+#[cfg(unix)]
+pub mod tray_backend;
+#[cfg(windows)]
+#[path = "tray_none.rs"]
 pub mod tray_backend;
 pub mod window;
 
@@ -31,6 +35,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
+#[cfg(unix)]
 use gtk4::glib::ffi;
 use gtk4::prelude::*;
 use libadwaita as adw;
@@ -95,6 +100,7 @@ fn run_pump() {
 
 // glib-rs 0.22 moved `unix_signal_add` to the separate glib-unix crate; the C
 // function lives in the libglib that glib-sys already links.
+#[cfg(unix)]
 unsafe extern "C" {
     fn g_unix_signal_add(
         signum: i32,
@@ -104,6 +110,7 @@ unsafe extern "C" {
 }
 
 /// Runs on the main loop, not in signal context, so it may touch the pump.
+#[cfg(unix)]
 extern "C" fn on_sigterm(_: ffi::gpointer) -> ffi::gboolean {
     SIGTERM.set(true);
     run_pump();
@@ -260,14 +267,20 @@ fn register_ui_resources() {
     gtk4::gio::resources_register(&resource);
 }
 
-/// Register the spell bundle by mmap. The Flatpak installs it beside the
-/// app; development runs fall back to the copy `build.rs` compiled. Without
+/// Register the spell bundle by mmap. The Flatpak installs it under `/app`,
+/// the Windows build in `share/` beside `bin/`; development runs fall back to
+/// the copy `build.rs` compiled. Without
 /// it the damage meter shows no spell icons or tooltips. Called from `run`,
 /// after logging is up and only in the primary instance.
 fn register_spell_resources() {
+    let installed = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.parent()?.join("share")))
+        .unwrap_or_else(|| "/app/share".into())
+        .join("warcraft-recorder/spells.gresource");
     let spells = [
-        "/app/share/warcraft-recorder/spells.gresource",
-        concat!(env!("OUT_DIR"), "/spells.gresource"),
+        installed,
+        concat!(env!("OUT_DIR"), "/spells.gresource").into(),
     ]
     .into_iter()
     .find_map(|path| gtk4::gio::Resource::load(path).ok());
@@ -372,7 +385,10 @@ pub fn run(
     // SIGTERM (logout, `systemctl stop`, `kill`) takes the tray Quit path so
     // the coordinator stops gpu-screen-recorder instead of orphaning it.
     // SAFETY: a plain fn pointer and no data; GLib owns the source.
-    unsafe { g_unix_signal_add(libc::SIGTERM, on_sigterm, std::ptr::null_mut()) };
+    #[cfg(unix)]
+    unsafe {
+        g_unix_signal_add(libc::SIGTERM, on_sigterm, std::ptr::null_mut())
+    };
     let shell: Rc<RefCell<Option<window::Shell>>> = Rc::new(RefCell::new(None));
     {
         let shell_cell = Rc::clone(&shell);
@@ -456,7 +472,7 @@ pub fn run(
                 if let Some(tray) = &tray {
                     let title = format!("Warcraft Recorder: {}", status::view(&snapshot).title);
                     if *last_tray_title.borrow() != title {
-                        tray.update(title.clone(), ksni::Status::Active);
+                        tray.update(title.clone());
                         *last_tray_title.borrow_mut() = title;
                     }
                 }

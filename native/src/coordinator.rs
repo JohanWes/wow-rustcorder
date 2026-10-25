@@ -231,7 +231,12 @@ impl Setup {
             ipc_socket: ipc_socket_path(&data_dir),
             data_dir,
             config_path,
-            gsr_binary: PathBuf::from("gpu-screen-recorder"),
+            // Windows resolves a bare name in the app's own folder first.
+            gsr_binary: PathBuf::from(if cfg!(windows) {
+                "wr-capture"
+            } else {
+                "gpu-screen-recorder"
+            }),
             media: MediaConfig {
                 utc_offset_minutes,
                 ..MediaConfig::default()
@@ -1965,6 +1970,29 @@ fn category_counts(entries: &[LibraryEntry]) -> Vec<(Category, usize)> {
     counts
 }
 
+#[cfg(windows)]
+fn local_clock() -> (i32, i32) {
+    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+    use windows_sys::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
+    // SAFETY: both calls only fill the out-structs they are given.
+    let (local, zone, which) = unsafe {
+        let mut local = std::mem::zeroed();
+        GetLocalTime(&mut local);
+        let mut zone: TIME_ZONE_INFORMATION = std::mem::zeroed();
+        let which = GetTimeZoneInformation(&mut zone);
+        (local, zone, which)
+    };
+    // Bias is minutes to add to local time to get UTC; 2 means DST is active.
+    let bias = zone.Bias
+        + if which == 2 {
+            zone.DaylightBias
+        } else {
+            zone.StandardBias
+        };
+    (i32::from(local.wYear), -bias)
+}
+
+#[cfg(unix)]
 fn local_clock() -> (i32, i32) {
     let seconds = now_unix_ms().div_euclid(1_000) as libc::time_t;
     let mut local = unsafe { std::mem::zeroed::<libc::tm>() };

@@ -13,20 +13,27 @@
 //!   an occasional exit during a long session starts over at 2 seconds.
 //! - Crash recovery of interrupted recordings is not Recorder's job; it keeps
 //!   no persistent state.
+//!
+//! On Windows the child is `wr-capture`, which speaks the same JSON lines over
+//! its stdin/stdout instead of a socket. Closing its stdin stands in for
+//! SIGINT: it finishes any open file and exits.
 
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::config::CaptureSettings;
-use crate::domain::{Category, Codec, RecordingId, ReplayStorage};
+#[cfg(unix)]
+use crate::domain::ReplayStorage;
+use crate::domain::{Category, Codec, RecordingId};
 use crate::process;
 use crate::storage::now_unix_ms;
 
@@ -180,7 +187,14 @@ const IPC_CONNECT_RETRY: Duration = Duration::from_millis(25);
 /// The connection to GSR's `-ipc` socket. Requests are tiny and the socket is
 /// otherwise idle, so writes on the nonblocking stream never wait.
 struct Ipc {
+    #[cfg(unix)]
     stream: UnixStream,
+    /// `None` once closed to make the child finish and exit.
+    #[cfg(windows)]
+    stdin: Option<std::process::ChildStdin>,
+    /// Stdout chunks from a reader thread, which disconnects at EOF.
+    #[cfg(windows)]
+    stdout: std::sync::mpsc::Receiver<Vec<u8>>,
     buf: Vec<u8>,
     next_id: i64,
 }
@@ -194,6 +208,28 @@ struct Reply {
 }
 
 impl Ipc {
+    #[cfg(windows)]
+    fn attach(child: &mut Child) -> Option<Self> {
+        let stdin = child.stdin.take()?;
+        let mut stdout = child.stdout.take()?;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            while let Ok(read @ 1..) = stdout.read(&mut chunk) {
+                if sender.send(chunk[..read].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        Some(Self {
+            stdin: Some(stdin),
+            stdout: receiver,
+            buf: Vec::new(),
+            next_id: 0,
+        })
+    }
+
+    #[cfg(unix)]
     fn connect(path: &Path) -> Option<Self> {
         let stream = UnixStream::connect(path).ok()?;
         stream.set_nonblocking(true).ok()?;
@@ -213,7 +249,13 @@ impl Ipc {
         }
         let mut line = request.to_string().into_bytes();
         line.push(b'\n');
+        #[cfg(unix)]
         self.stream.write_all(&line)?;
+        #[cfg(windows)]
+        self.stdin
+            .as_mut()
+            .ok_or(io::ErrorKind::BrokenPipe)?
+            .write_all(&line)?;
         tracing::info!(id, name, "sent GSR request");
         Ok(id)
     }
@@ -221,16 +263,7 @@ impl Ipc {
     /// Append every complete reply line to `replies`; `Err` once GSR closed
     /// the socket or it failed. Replies read before that are still appended.
     fn drain(&mut self, replies: &mut Vec<Reply>) -> io::Result<()> {
-        let mut chunk = [0u8; 4096];
-        let result = loop {
-            match self.stream.read(&mut chunk) {
-                Ok(0) => break Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(read) => self.buf.extend_from_slice(&chunk[..read]),
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => break Ok(()),
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                Err(error) => break Err(error),
-            }
-        };
+        let result = self.read_available();
         while let Some(end) = self.buf.iter().position(|&byte| byte == b'\n') {
             let line: Vec<u8> = self.buf.drain(..=end).collect();
             match serde_json::from_slice::<Reply>(&line) {
@@ -239,6 +272,51 @@ impl Ipc {
             }
         }
         result
+    }
+
+    #[cfg(unix)]
+    fn read_available(&mut self) -> io::Result<()> {
+        let mut chunk = [0u8; 4096];
+        loop {
+            match self.stream.read(&mut chunk) {
+                Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
+                Ok(read) => self.buf.extend_from_slice(&chunk[..read]),
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn read_available(&mut self) -> io::Result<()> {
+        use std::sync::mpsc::TryRecvError;
+        loop {
+            match self.stdout.try_recv() {
+                Ok(chunk) => self.buf.extend_from_slice(&chunk),
+                Err(TryRecvError::Empty) => return Ok(()),
+                Err(TryRecvError::Disconnected) => {
+                    return Err(io::ErrorKind::UnexpectedEof.into());
+                }
+            }
+        }
+    }
+}
+
+/// Ask the child to finish its files and exit: SIGINT for GSR, closing stdin
+/// for `wr-capture`.
+fn interrupt(child: &Child, ipc: Option<&mut Ipc>) {
+    #[cfg(unix)]
+    {
+        let _ = ipc;
+        let _ = process::send_signal(child, libc::SIGINT);
+    }
+    #[cfg(windows)]
+    {
+        let _ = child;
+        if let Some(ipc) = ipc {
+            ipc.stdin = None;
+        }
     }
 }
 
@@ -343,7 +421,7 @@ impl Recorder {
         // Check the replacement binary before touching a live capture. The
         // remaining setup errors occur only after the deliberate replacement
         // begins; invalid settings and an unavailable binary do not disarm.
-        let version = Command::new(&config.gsr_binary)
+        let version = process::command(&config.gsr_binary)
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -417,15 +495,21 @@ impl Recorder {
             .create(true)
             .append(true)
             .open(Self::log_path(config))?;
-        let mut command = Command::new(&config.gsr_binary);
+        let mut command = process::command(&config.gsr_binary);
+        // Stable Flatpak constrains the GTK process allocator arenas for its
+        // RSS gate; the recorder must retain its own defaults.
+        command.env_remove("MALLOC_ARENA_MAX");
+        #[cfg(unix)]
         command
-            // Stable Flatpak constrains the GTK process allocator arenas for
-            // its RSS gate; the recorder must retain its own defaults.
-            .env_remove("MALLOC_ARENA_MAX")
             .args(build_gsr_args(config))
             .stdin(Stdio::null())
-            .stdout(Stdio::from(log.try_clone()?))
-            .stderr(Stdio::from(log));
+            .stdout(Stdio::from(log.try_clone()?));
+        #[cfg(windows)]
+        command
+            .args(build_wr_capture_args(config))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped());
+        command.stderr(Stdio::from(log));
         let mut child = command
             .spawn()
             .map_err(|error| RecorderError::SpawnFailed {
@@ -436,7 +520,10 @@ impl Recorder {
         // GSR binds the socket before the portal dialog, so connected does
         // not mean capturing; healthy is alive and connected at the deadline.
         let deadline = Instant::now() + self.timeouts.arm_stability;
+        #[cfg(unix)]
         let mut ipc = None;
+        #[cfg(windows)]
+        let ipc = Ipc::attach(&mut child);
         loop {
             if let Some(status) = child.try_wait()? {
                 let log_tail = process::read_log_tail(&Self::log_path(config));
@@ -448,6 +535,7 @@ impl Recorder {
                     log_tail,
                 });
             }
+            #[cfg(unix)]
             if ipc.is_none() {
                 ipc = Ipc::connect(&config.ipc_socket);
             }
@@ -547,11 +635,11 @@ impl Recorder {
     /// child still alive behind a dead socket is wedged: SIGINT it and let
     /// the exit branch of `poll` restart it.
     fn lose_ipc(&mut self) {
-        self.ipc = None;
+        let mut ipc = self.ipc.take();
         if let Some(child) = self.child.as_mut()
             && matches!(child.try_wait(), Ok(None))
         {
-            let _ = process::send_signal(child, libc::SIGINT);
+            interrupt(child, ipc.as_mut());
         }
     }
 
@@ -610,7 +698,7 @@ impl Recorder {
                 ending.sigint_sent = true;
                 ending.stop_deadline = now + self.timeouts.exit_grace;
                 if let Some(child) = self.child.as_ref() {
-                    let _ = process::send_signal(child, libc::SIGINT);
+                    interrupt(child, self.ipc.as_mut());
                 }
                 return;
             }
@@ -740,13 +828,29 @@ impl Recorder {
 
     /// `gpu-screen-recorder --list-audio-devices` with the recorded 2 s
     /// timeout; defaults are always present.
+    #[cfg(windows)]
+    pub fn audio_devices(&mut self) -> Result<AudioDevices, RecorderError> {
+        let device = |id: &str, label: &str| AudioDevice {
+            id: id.to_string(),
+            label: label.to_string(),
+        };
+        Ok(AudioDevices {
+            outputs: vec![
+                device("default_output", "Desktop audio"),
+                device("app", "Game audio only"),
+            ],
+            inputs: vec![device("default_input", "Default microphone")],
+        })
+    }
+
+    #[cfg(unix)]
     pub fn audio_devices(&mut self) -> Result<AudioDevices, RecorderError> {
         let binary = self
             .config
             .as_ref()
             .map(|config| config.gsr_binary.clone())
             .unwrap_or_else(|| PathBuf::from("gpu-screen-recorder"));
-        let mut child = Command::new(binary)
+        let mut child = process::command(binary)
             .env_remove("MALLOC_ARENA_MAX")
             .arg("--list-audio-devices")
             .stdin(Stdio::null())
@@ -910,7 +1014,57 @@ impl Recorder {
     }
 }
 
+/// `wr-capture` finds the WoW window itself and only knows RAM replay.
+#[cfg(windows)]
+fn build_wr_capture_args(config: &CaptureConfig) -> Vec<OsString> {
+    let settings = &config.settings;
+    let codec = match settings.codec {
+        Codec::H264 => "h264",
+        Codec::Hevc => "hevc",
+        Codec::Av1 => "av1",
+    };
+    let mut args: Vec<OsString> = vec![
+        "-w".into(),
+        "Wow.exe".into(),
+        "-r".into(),
+        settings.replay_buffer_seconds.to_string().into(),
+        "-f".into(),
+        settings.fps.to_string().into(),
+        "-q".into(),
+        settings.bitrate_kbps.to_string().into(),
+        "-k".into(),
+        codec.into(),
+        "-cursor".into(),
+        if settings.capture_cursor { "yes" } else { "no" }.into(),
+        "-o".into(),
+        Recorder::replay_dir(config).into_os_string(),
+        "-ro".into(),
+        Recorder::regular_dir(config).into_os_string(),
+    ];
+    let audio = audio_sources(settings);
+    if !audio.is_empty() {
+        args.push("-a".into());
+        args.push(audio.join("|").into());
+    }
+    args
+}
+
+fn audio_sources(settings: &CaptureSettings) -> Vec<&str> {
+    let mut audio: Vec<&str> = Vec::new();
+    if !settings.audio_output.is_empty() {
+        audio.push(settings.audio_output.as_str());
+    }
+    if let Some(input) = settings.audio_input.as_deref()
+        && !input.is_empty()
+        && !audio.contains(&input)
+    {
+        audio.push(input);
+    }
+    audio
+}
+
 /// Paths and devices stay single `OsString` arguments; no shell is involved.
+#[cfg(unix)]
 fn build_gsr_args(config: &CaptureConfig) -> Vec<OsString> {
     let settings = &config.settings;
     let codec = match settings.codec {
@@ -958,16 +1112,7 @@ fn build_gsr_args(config: &CaptureConfig) -> Vec<OsString> {
         "-v".into(),
         "no".into(),
     ];
-    let mut audio: Vec<&str> = Vec::new();
-    if !settings.audio_output.is_empty() {
-        audio.push(settings.audio_output.as_str());
-    }
-    if let Some(input) = settings.audio_input.as_deref()
-        && !input.is_empty()
-        && !audio.contains(&input)
-    {
-        audio.push(input);
-    }
+    let audio = audio_sources(settings);
     if !audio.is_empty() {
         args.push("-a".into());
         args.push(audio.join("|").into());
@@ -981,6 +1126,7 @@ fn read_token(path: &Path) -> Option<String> {
     if token.is_empty() { None } else { Some(token) }
 }
 
+#[cfg(unix)]
 fn text_tail(text: &str) -> String {
     let start = text
         .len()
@@ -992,6 +1138,7 @@ fn text_tail(text: &str) -> String {
 /// defaults always come first; every other source is passed to `-a` as
 /// `device:<name>` and sorted by its PulseAudio/PipeWire name: `*.monitor`
 /// sources are outputs, everything else (virtual mics included) is an input.
+#[cfg_attr(windows, allow(dead_code))]
 fn parse_audio_devices(text: &str) -> AudioDevices {
     let device = |id: &str, detail: &str| AudioDevice {
         id: id.to_string(),
@@ -1022,7 +1169,7 @@ fn parse_audio_devices(text: &str) -> AudioDevices {
     devices
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

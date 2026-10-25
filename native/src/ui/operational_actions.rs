@@ -212,6 +212,15 @@ fn info_dialog(parent: &gtk4::Widget, heading: &str, body: &str) {
 /// app updates; without Flatpak, say what is missing; otherwise confirm and
 /// run the install script off the GTK thread.
 pub fn present_update_dialog(parent: &gtk4::Widget) {
+    if cfg!(windows) {
+        info_dialog(
+            parent,
+            "Check the releases page",
+            "Download the latest Windows installer from \
+             github.com/JohanWes/wow-recorder-linuxwayland/releases.",
+        );
+        return;
+    }
     if std::path::Path::new("/.flatpak-info").exists() {
         info_dialog(
             parent,

@@ -17,6 +17,11 @@ fn main() {
     let data = data
         .canonicalize()
         .unwrap_or_else(|error| panic!("read {}: {error}", data.display()));
+    // Windows canonical paths are `\\?\` verbatim paths, which GLib cannot open.
+    let data = data
+        .to_str()
+        .and_then(|path| path.strip_prefix(r"\\?\"))
+        .map_or(data.clone(), PathBuf::from);
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("out dir"));
 
     for entry in std::fs::read_dir(data.join("assets/icons")).expect("list icon assets") {

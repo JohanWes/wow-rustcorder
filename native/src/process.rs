@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Checked Unix signal/termination helpers for spawned children, plus the
-//! bounded log tail their failures are reported with.
+//! Checked signal/termination helpers for spawned children, plus the bounded
+//! log tail their failures are reported with.
 //!
 //! Rust's `Child` can only SIGKILL, so the SIGINT that lets GSR and FFmpeg
-//! finish their files goes through `libc::kill` here.
+//! finish their files goes through `libc::kill` here. Windows has no SIGINT
+//! for another process: `wr-capture` finishes when its stdin closes, which
+//! the recorder does before terminating it.
 
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
-use std::process::Child;
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 /// How much of a child's log a failure report carries.
@@ -35,8 +38,23 @@ pub fn read_log_tail(path: &Path) -> String {
     String::from_utf8_lossy(&tail).into_owned()
 }
 
+/// A `Command` that opens no console window when the GUI app starts a
+/// console program on Windows.
+pub fn command(program: impl AsRef<OsStr>) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 /// Send `signal` to a live child. Rejects a missing/zero PID and converts the
 /// OS failure into the underlying error.
+#[cfg(unix)]
 pub fn send_signal(child: &Child, signal: i32) -> io::Result<()> {
     let pid = child.id();
     if pid == 0 {
@@ -68,11 +86,12 @@ pub fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<boo
     }
 }
 
-/// Graceful stop: SIGINT, wait up to `grace`, then SIGKILL and reap.
+/// Graceful stop: SIGINT (Unix only), wait up to `grace`, then kill and reap.
 pub fn terminate(child: &mut Child, grace: Duration) -> io::Result<()> {
     if child.try_wait()?.is_some() {
         return Ok(());
     }
+    #[cfg(unix)]
     let _ = send_signal(child, libc::SIGINT);
     if wait_with_timeout(child, grace)? {
         return Ok(());
@@ -82,7 +101,7 @@ pub fn terminate(child: &mut Child, grace: Duration) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::process::{Command, Stdio};

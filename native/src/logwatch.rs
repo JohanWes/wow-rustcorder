@@ -386,6 +386,18 @@ fn probe_header_context(path: &Path, base: ParseTimeContext) -> Result<ParseTime
     Ok(combat_log_version(line).map_or(base, |version| base.with_combat_log_version(version)))
 }
 
+/// Windows has no stable inode through std; a file's creation time tells a
+/// rotated log apart from the one it replaced just as well.
+#[cfg(windows)]
+fn file_identity(metadata: &Metadata) -> FileIdentity {
+    use std::os::windows::fs::MetadataExt;
+    FileIdentity {
+        device: 0,
+        inode: metadata.creation_time(),
+    }
+}
+
+#[cfg(unix)]
 fn file_identity(metadata: &Metadata) -> FileIdentity {
     use std::os::unix::fs::MetadataExt;
     FileIdentity {

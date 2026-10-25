@@ -676,6 +676,8 @@ impl Settings {
             });
         }
         gated.push(reselect.clone().upcast());
+        // wr-capture follows the Wow.exe window by itself.
+        reselect.set_visible(cfg!(unix));
         target_row.add_suffix(&reselect);
         target_group.add(&target_row);
         let capture_warning = gtk4::Label::new(None);
@@ -1082,12 +1084,13 @@ impl Settings {
             self.set_feedback("", "dim-label");
         }
 
-        self.target_row
-            .set_subtitle(if snapshot.config.capture.capture_target_token.is_some() {
-                "Selected: restored automatically from the saved portal token"
-            } else {
-                "Not selected yet: the desktop portal will ask on the next capture"
-            });
+        self.target_row.set_subtitle(if cfg!(windows) {
+            "Follows the World of Warcraft window automatically"
+        } else if snapshot.config.capture.capture_target_token.is_some() {
+            "Selected: restored automatically from the saved portal token"
+        } else {
+            "Not selected yet: the desktop portal will ask on the next capture"
+        });
 
         // The recorder's own capture-settings rejection, shown inline instead
         // of a duplicated compatibility table.

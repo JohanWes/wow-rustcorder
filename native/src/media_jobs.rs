@@ -12,7 +12,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::time::{Duration, Instant};
 
@@ -463,7 +463,7 @@ impl MediaWorker {
             .write(true)
             .open(log_path)
             .and_then(|log| {
-                Command::new(&self.config.ffmpeg)
+                process::command(&self.config.ffmpeg)
                     // The GTK process constrains allocator arenas for its RSS
                     // gate; media tools must retain their own defaults.
                     .env_remove("MALLOC_ARENA_MAX")
@@ -665,7 +665,7 @@ fn measure_args(media: &Path) -> Vec<String> {
         "-y".to_owned(),
         "-f".to_owned(),
         "matroska".to_owned(),
-        "/dev/null".to_owned(),
+        if cfg!(windows) { "NUL" } else { "/dev/null" }.to_owned(),
     ]
 }
 
@@ -776,9 +776,10 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
     (if month <= 2 { year + 1 } else { year }, month, day)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::process::Command;
     use std::sync::mpsc::{Sender, sync_channel};
     use std::thread;
 
