@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// One encoded access unit: an Annex-B video frame or an ADTS AAC frame.
+/// One encoded access unit: an Annex-B (H.264/HEVC) or OBU (AV1) video frame,
+/// or an ADTS AAC frame.
 #[derive(Clone, Debug)]
 pub struct Packet {
     pub video: bool,
@@ -20,4 +21,5 @@ impl Packet {
 pub enum VideoCodec {
     H264,
     Hevc,
+    Av1,
 }

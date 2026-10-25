@@ -53,7 +53,7 @@ pub fn run(
     options: &Options,
     shared: &Shared,
     sender: Sender<Message>,
-    ready: Sender<Result<(), String>>,
+    ready: Sender<Result<(u32, u32), String>>,
 ) -> Result<(), String> {
     let setup = || -> Result<_, String> {
         let (device, context) = create_device()?;
@@ -72,12 +72,12 @@ pub fn run(
             "encoding {width}x{height} at {} fps with {}",
             options.fps, encoder.name
         );
-        Ok((context, converter, encoder, capture))
+        Ok((context, converter, encoder, capture, (width, height)))
     };
     let (context, mut converter, mut encoder, mut capture) = match setup() {
-        Ok(parts) => {
-            let _ = ready.send(Ok(()));
-            parts
+        Ok((context, converter, encoder, capture, size)) => {
+            let _ = ready.send(Ok(size));
+            (context, converter, encoder, capture)
         }
         Err(message) => {
             let _ = ready.send(Err(message));

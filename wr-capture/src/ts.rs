@@ -95,6 +95,7 @@ impl<W: Write> TsWriter<W> {
         let video_type = match self.codec {
             VideoCodec::H264 => 0x1B,
             VideoCodec::Hevc => 0x24,
+            VideoCodec::Av1 => unreachable!("AV1 is written as Matroska"),
         };
         let mut pmt = vec![0x02, 0xB0, 0, 0x00, 0x01, 0xC1, 0x00, 0x00];
         pmt.extend_from_slice(&(0xE000 | VIDEO_PID).to_be_bytes());

@@ -105,14 +105,14 @@ pub fn run(options: Options) -> i32 {
         let shared = shared.clone();
         move |sender| capture::run(&options, &shared, sender, ready_sender)
     });
-    match ready.recv() {
-        Ok(Ok(())) => {}
+    let size = match ready.recv() {
+        Ok(Ok(size)) => size,
         Ok(Err(message)) => {
             eprintln!("{message}");
             return 1;
         }
         Err(_) => return 1,
-    }
+    };
     if !options.audio.is_empty() {
         let options = options.clone();
         let shared = shared.clone();
@@ -128,6 +128,7 @@ pub fn run(options: Options) -> i32 {
 
     let mut router = Router::new(
         options.codec,
+        size,
         !options.audio.is_empty(),
         options.replay_seconds,
         options.replay_dir.clone(),

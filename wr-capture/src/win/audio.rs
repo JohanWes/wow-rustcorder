@@ -40,11 +40,15 @@ const RETRY: Duration = Duration::from_secs(2);
 pub fn run(options: &Options, shared: &Shared, sender: Sender<Message>) -> Result<(), String> {
     let mut encoder = Encoder::aac()?;
     let origin = clock_origin();
-    let mut tracks: Vec<Track> = options
-        .audio
-        .iter()
-        .map(|&source| Track::new(source))
-        .collect();
+    let mut sources = options.audio.clone();
+    if sources.contains(&AudioSource::App) && windows_build() < PROCESS_LOOPBACK_BUILD {
+        eprintln!("this Windows cannot capture one app's audio; recording desktop audio");
+        sources.retain(|&source| source != AudioSource::App);
+        if !sources.contains(&AudioSource::DefaultOutput) {
+            sources.insert(0, AudioSource::DefaultOutput);
+        }
+    }
+    let mut tracks: Vec<Track> = sources.into_iter().map(Track::new).collect();
     let mut mixed_until = now_samples() - LATENCY;
     let mut mix = Vec::new();
     let mut pcm = Vec::new();
@@ -83,6 +87,34 @@ pub fn run(options: &Options, shared: &Shared, sender: Sender<Message>) -> Resul
         }
         mixed_until = target;
     }
+}
+
+/// Process loopback capture arrived in Windows build 20348 (Windows 11).
+const PROCESS_LOOPBACK_BUILD: u32 = 20_348;
+
+fn windows_build() -> u32 {
+    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
+    use windows::core::w;
+    let mut buffer = [0u16; 16];
+    let mut size = (buffer.len() * 2) as u32;
+    let read = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            w!("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"),
+            w!("CurrentBuildNumber"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut size),
+        )
+    };
+    if read.is_err() {
+        return 0;
+    }
+    let len = buffer.iter().position(|&unit| unit == 0).unwrap_or(0);
+    String::from_utf16_lossy(&buffer[..len])
+        .parse()
+        .unwrap_or(0)
 }
 
 fn now_samples() -> i64 {

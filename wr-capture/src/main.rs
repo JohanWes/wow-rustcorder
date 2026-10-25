@@ -11,6 +11,7 @@
 // Only the Windows build uses the capture core; Linux runs its unit tests.
 #![cfg_attr(not(windows), allow(dead_code))]
 
+mod mkv;
 mod packet;
 mod router;
 mod ts;
@@ -53,7 +54,7 @@ pub struct Options {
 }
 
 const USAGE: &str = "usage: wr-capture -o <replay dir> -ro <regular dir> [-w Wow.exe|monitor] \
-[-f fps] [-q kbps] [-k h264|hevc] [-r seconds] [-a app|default_output|default_input ...] \
+[-f fps] [-q kbps] [-k h264|hevc|av1] [-r seconds] [-a app|default_output|default_input ...] \
 [-cursor yes|no] [-s WxH] | --version | --list-audio-devices";
 
 fn parse(args: &[String]) -> Result<Options, String> {
@@ -86,6 +87,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
                 options.codec = match value.as_str() {
                     "h264" => VideoCodec::H264,
                     "hevc" => VideoCodec::Hevc,
+                    "av1" => VideoCodec::Av1,
                     _ => return Err(format!("-k: unsupported codec {value}")),
                 }
             }
@@ -171,6 +173,6 @@ mod tests {
         assert!(!options.cursor);
         assert_eq!(options.size, Some((1920, 1080)));
         assert!(parse(&args("-o R")).is_err());
-        assert!(parse(&args("-o R -ro V -k av1")).is_err());
+        assert!(parse(&args("-o R -ro V -k vp9")).is_err());
     }
 }

@@ -50,6 +50,7 @@ impl Encoder {
         let subtype = match codec {
             VideoCodec::H264 => MFVideoFormat_H264,
             VideoCodec::Hevc => MFVideoFormat_HEVC,
+            VideoCodec::Av1 => MFVideoFormat_AV1,
         };
         let input = MFT_REGISTER_TYPE_INFO {
             guidMajorType: MFMediaType_Video,
@@ -187,6 +188,7 @@ impl Encoder {
             let profile = match codec {
                 VideoCodec::H264 => eAVEncH264VProfile_High.0 as u32,
                 VideoCodec::Hevc => eAVEncH265VProfile_Main_420_8.0 as u32,
+                VideoCodec::Av1 => eAVEncAV1VProfile_Main_420_8.0 as u32,
             };
             output
                 .SetUINT32(&MF_MT_MPEG2_PROFILE, profile)
@@ -499,7 +501,8 @@ impl Encoder {
                 data,
             });
         };
-        // TS readers need the parameter sets in-band on every keyframe.
+        // Readers need the parameter sets (AV1: sequence header) in-band on
+        // every keyframe.
         if key && !has_parameter_sets(&data, codec) {
             if self.parameter_sets.is_none() {
                 self.parameter_sets = unsafe { self.transform.GetOutputCurrentType(0) }
@@ -623,17 +626,26 @@ fn sequence_header(output: &IMFMediaType) -> Option<Vec<u8>> {
     let size = unsafe { output.GetBlobSize(&MF_MT_MPEG_SEQUENCE_HEADER) }.ok()?;
     let mut blob = vec![0u8; size as usize];
     unsafe { output.GetBlob(&MF_MT_MPEG_SEQUENCE_HEADER, &mut blob, None) }.ok()?;
+    // AV1 encoders may hand over an `av1C` record; keep only its OBUs.
+    if blob.len() > 4 && blob[0] == 0x81 {
+        blob.drain(..4);
+    }
     Some(blob)
 }
 
-/// Whether an Annex-B access unit carries an SPS (H.264) or VPS (HEVC).
+/// Whether an access unit carries an SPS (H.264), VPS (HEVC) or sequence
+/// header OBU (AV1).
 fn has_parameter_sets(data: &[u8], codec: VideoCodec) -> bool {
+    if codec == VideoCodec::Av1 {
+        return crate::mkv::has_sequence_header(data);
+    }
     // Parameter sets lead the access unit.
     data[..data.len().min(512)].windows(4).any(|window| {
         window[..3] == [0, 0, 1]
             && match codec {
                 VideoCodec::H264 => window[3] & 0x1F == 7,
                 VideoCodec::Hevc => (window[3] >> 1) & 0x3F == 32,
+                VideoCodec::Av1 => false,
             }
     })
 }

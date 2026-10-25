@@ -10,18 +10,40 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::BufWriter;
-use std::path::PathBuf;
+use std::io::{self, BufWriter};
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
+use crate::mkv::MkvWriter;
 use crate::packet::{Packet, VideoCodec};
 use crate::ts::TsWriter;
 
-type Writer = TsWriter<BufWriter<File>>;
+/// MPEG-TS for H.264/HEVC, Matroska for AV1.
+enum Writer {
+    Ts(TsWriter<BufWriter<File>>),
+    Mkv(MkvWriter<BufWriter<File>>),
+}
+
+impl Writer {
+    fn write(&mut self, packet: &Packet) -> io::Result<()> {
+        match self {
+            Self::Ts(writer) => writer.write(packet),
+            Self::Mkv(writer) => writer.write(packet),
+        }
+    }
+
+    fn finish(self) -> io::Result<()> {
+        match self {
+            Self::Ts(writer) => writer.finish(),
+            Self::Mkv(writer) => writer.finish(),
+        }
+    }
+}
 
 pub struct Router {
     codec: VideoCodec,
+    size: (u32, u32),
     audio: bool,
     keep: i64,
     replay_dir: PathBuf,
@@ -41,6 +63,7 @@ pub struct Router {
 impl Router {
     pub fn new(
         codec: VideoCodec,
+        size: (u32, u32),
         audio: bool,
         keep_seconds: u32,
         replay_dir: PathBuf,
@@ -48,6 +71,7 @@ impl Router {
     ) -> Self {
         Self {
             codec,
+            size,
             audio,
             keep: i64::from(keep_seconds) * 10_000_000,
             replay_dir,
@@ -119,10 +143,9 @@ impl Router {
                 });
             }
             if std::mem::take(&mut self.start_pending) {
-                let path = self.regular_dir.join(format!("Video_{now_ms}.ts"));
-                match TsWriter::create(&path, self.codec, self.audio) {
-                    Ok(writer) => self.regular = Some((writer, path)),
-                    Err(error) => eprintln!("cannot create {}: {error}", path.display()),
+                match self.open(&self.regular_dir, &format!("Video_{now_ms}")) {
+                    Ok(opened) => self.regular = Some(opened),
+                    Err(error) => eprintln!("cannot create the recording: {error}"),
                 }
             }
         }
@@ -162,8 +185,8 @@ impl Router {
         else {
             return Err("failed to find a video keyframe".into());
         };
-        let path = self.replay_dir.join(format!("Replay_{now_ms}.ts"));
-        let mut writer = TsWriter::create(&path, self.codec, self.audio)
+        let (mut writer, path) = self
+            .open(&self.replay_dir, &format!("Replay_{now_ms}"))
             .map_err(|error| format!("cannot create the replay: {error}"))?;
         let start = self
             .ring
@@ -177,6 +200,23 @@ impl Router {
         }
         self.replay = Some((writer, path, id));
         Ok(())
+    }
+
+    fn open(&self, dir: &Path, stem: &str) -> io::Result<(Writer, PathBuf)> {
+        Ok(match self.codec {
+            VideoCodec::Av1 => {
+                let path = dir.join(format!("{stem}.mkv"));
+                let writer = MkvWriter::create(&path, self.size, self.audio)?;
+                (Writer::Mkv(writer), path)
+            }
+            codec => {
+                let path = dir.join(format!("{stem}.ts"));
+                (
+                    Writer::Ts(TsWriter::create(&path, codec, self.audio)?),
+                    path,
+                )
+            }
+        })
     }
 
     /// Keep the packet, then drop whole GOPs once the next one alone covers
@@ -237,7 +277,7 @@ mod tests {
     #[test]
     fn buffer_keeps_whole_gops_covering_its_length() {
         let (replay, regular) = dirs("ring");
-        let mut router = Router::new(VideoCodec::H264, false, 3, replay, regular);
+        let mut router = Router::new(VideoCodec::H264, (64, 64), false, 3, replay, regular);
         for index in 0..100 {
             router.push(frame(index), 0);
         }
@@ -252,7 +292,7 @@ mod tests {
     #[test]
     fn save_then_start_cuts_both_files_at_one_keyframe() {
         let (replay, regular) = dirs("cut");
-        let mut router = Router::new(VideoCodec::H264, false, 30, replay, regular);
+        let mut router = Router::new(VideoCodec::H264, (64, 64), false, 30, replay, regular);
         for index in 0..55 {
             router.push(frame(index), 0);
         }
@@ -298,7 +338,7 @@ mod tests {
     #[test]
     fn save_without_video_reports_the_missing_keyframe() {
         let (replay, regular) = dirs("empty");
-        let mut router = Router::new(VideoCodec::H264, false, 30, replay, regular);
+        let mut router = Router::new(VideoCodec::H264, (64, 64), false, 30, replay, regular);
         let replies = router.request(&request("save-replay", 1, Some(5)), 0);
         assert_eq!(replies[0]["result"], "error");
     }
