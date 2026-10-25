@@ -83,3 +83,21 @@ flatpak uninstall --user io.github.JohanWes.WarcraftRecorder
 
 Use `--delete-data` only when deleting the native app's private data is
 intentional.
+
+## Windows
+
+The tag job also builds `WarcraftRecorder-<version>-setup.exe` (Inno Setup,
+per-user, no admin) and `latest.json` on a Windows runner with
+`windows/build.sh`, and attaches both to the GitHub release. The installer is
+not code-signed yet, so SmartScreen warns on first run.
+
+Installed apps check
+`https://johanwes.github.io/wow-recorder-linuxwayland/windows/latest.json` at
+startup and from "Check for updates", then download the installer, verify its
+SHA-256, and run it silently. As with the Flatpak repo, nothing reaches users
+until that file lands: copy the release's `latest.json` to `windows/` on the
+`gh-pages` branch together with the Flatpak `repo/` publication.
+
+To build locally, run `bash windows/build.sh` in an MSYS2 UCRT64 shell with
+the packages listed at the top of the script and Inno Setup 6. Output lands in
+`build-windows/`. Uninstalling leaves config and recordings in place.

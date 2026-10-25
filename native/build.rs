@@ -46,6 +46,10 @@ fn main() {
         style_dir.join("style.css").display()
     );
 
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        windows_resources(&manifest_dir, &out_dir);
+    }
+
     compile(
         &data,
         &style_dir,
@@ -58,6 +62,55 @@ fn main() {
         &data.join("spells.gresource.xml"),
         &out_dir.join("spells.gresource"),
     );
+}
+
+/// Embeds the icon and version details Windows shows for the exe.
+fn windows_resources(manifest_dir: &Path, out_dir: &Path) {
+    let icon = manifest_dir.join("../windows/warcraft-recorder.ico");
+    println!("cargo:rerun-if-changed={}", icon.display());
+    let version = std::env::var("CARGO_PKG_VERSION").expect("package version");
+    let numbers = version.replace('.', ",");
+    let rc = out_dir.join("app.rc");
+    std::fs::write(
+        &rc,
+        format!(
+            r#"1 ICON "{icon}"
+1 VERSIONINFO
+FILEVERSION {numbers},0
+PRODUCTVERSION {numbers},0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "Warcraft Recorder"
+      VALUE "ProductName", "Warcraft Recorder"
+      VALUE "FileVersion", "{version}"
+      VALUE "ProductVersion", "{version}"
+      VALUE "OriginalFilename", "warcraft-recorder.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
+"#,
+            icon = icon.display().to_string().replace('\\', "/"),
+        ),
+    )
+    .expect("write app.rc");
+    let object = out_dir.join("app-resources.o");
+    let status = Command::new("windres")
+        .arg(&rc)
+        .arg("-O")
+        .arg("coff")
+        .arg("-o")
+        .arg(&object)
+        .status()
+        .expect("run windres (MSYS2 binutils)");
+    assert!(status.success(), "windres failed");
+    println!("cargo:rustc-link-arg-bins={}", object.display());
 }
 
 fn compile(data: &Path, style_dir: &Path, xml: &Path, output: &Path) {

@@ -26,6 +26,8 @@ pub mod tray_backend;
 #[path = "tray_none.rs"]
 pub mod tray_backend;
 pub mod window;
+#[cfg(windows)]
+pub mod windows_update;
 
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
@@ -418,6 +420,10 @@ pub fn run(
             }
             let shell_ref = shell_cell.borrow();
             let built = shell_ref.as_ref().expect("shell built above");
+            #[cfg(windows)]
+            if first_activation {
+                windows_update::check_quietly(built.widget());
+            }
             // Only start hidden when a tray watcher can bring the window back.
             let watcher_available = activate_tray
                 .as_ref()

@@ -458,6 +458,11 @@ impl Shell {
         shell
     }
 
+    #[cfg(windows)]
+    pub fn widget(&self) -> &gtk4::Widget {
+        self.window.upcast_ref()
+    }
+
     pub fn present(&self) {
         self.hold_guard.borrow_mut().take();
         // A window hidden while minimized keeps MINIMIZED on its toplevel, so

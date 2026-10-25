@@ -7,6 +7,8 @@ on:
       - 'native/**'
       - 'flatpak/**'
       - 'data/**'
+      - 'wr-capture/**'
+      - 'windows/**'
   push:
     branches: [main]
     tags: ['v*']
@@ -127,9 +129,52 @@ jobs:
             repo
           if-no-files-found: error
 
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            curl make tar
+          pacboy: >-
+            gtk4:p libadwaita:p gstreamer:p gst-plugins-base:p gst-plugins-good:p
+            gst-plugins-bad:p gst-libav:p librsvg:p rust:p gcc:p pkgconf:p meson:p ninja:p
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --version 6.7.3 -y --no-progress
+          }
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build-windows/ffmpeg
+          key: windows-ffmpeg-${{ hashFiles('windows/build.sh') }}
+      - name: Check tag version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: bash scripts/check-release-version.sh "$GITHUB_REF_NAME"
+      - name: Build installer
+        run: bash windows/build.sh
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: warcraft-recorder-windows
+          path: |
+            build-windows/WarcraftRecorder-*-setup.exe
+            build-windows/latest.json
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub release
-    needs: release
+    needs: [release, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -141,6 +186,11 @@ jobs:
         with:
           name: warcraft-recorder-flatpak-${{ github.ref_name }}
           path: candidate
+      - name: Download Windows installer
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: warcraft-recorder-windows
+          path: windows
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -156,4 +206,6 @@ jobs:
             --title "Warcraft Recorder $version" \
             --notes-file notes.md \
             candidate/warcraft-recorder.flatpak \
-            candidate/warcraft-recorder.flatpak.sha256
+            candidate/warcraft-recorder.flatpak.sha256 \
+            windows/WarcraftRecorder-*-setup.exe \
+            windows/latest.json

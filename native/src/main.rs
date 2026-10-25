@@ -4,6 +4,9 @@
 //! runs the GTK shell, then joins both top-level handles after the
 //! application loop returns. No child or thread is detached.
 
+// No console window behind the GUI on Windows; logs go to app.log.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -25,6 +28,8 @@ const APP_ID: &str = warcraft_recorder::config::APP_ID;
 const APP_ID: &str = "io.github.JohanWes.WarcraftRecorder.Devel";
 
 fn main() {
+    #[cfg(windows)]
+    isolate_gstreamer();
     let setup = match coordinator::Setup::from_environment() {
         Ok(setup) => setup,
         Err(error) => {
@@ -110,6 +115,41 @@ fn config_dir(config_path: &std::path::Path) -> PathBuf {
     config_path
         .parent()
         .map_or_else(PathBuf::new, std::path::Path::to_owned)
+}
+
+/// The installed app (`bin/` beside `lib/gstreamer-1.0/`) loads only its own
+/// GStreamer plugins, with a registry of its own, so another GStreamer on the
+/// machine can neither leak plugins in nor share a stale registry. Runs before
+/// any other thread exists.
+#[cfg(windows)]
+fn isolate_gstreamer() {
+    let Some(root) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.parent()?.to_path_buf()))
+    else {
+        return;
+    };
+    let plugins = root.join("lib").join("gstreamer-1.0");
+    if !plugins.is_dir() {
+        return;
+    }
+    let registry = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.clone())
+        .join(warcraft_recorder::config::APP_ID)
+        .join("gstreamer-registry.bin");
+    let scanner = root.join("libexec/gstreamer-1.0/gst-plugin-scanner.exe");
+    // Clapper's own Windows lookup resolves relative to lib/gstreamer-1.0.
+    let importers = root.join("lib/clapper-0.0/gst/plugin/importers");
+    // SAFETY: single-threaded here; nothing else reads the environment yet.
+    unsafe {
+        std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", &plugins);
+        std::env::remove_var("GST_PLUGIN_PATH_1_0");
+        std::env::remove_var("GST_PLUGIN_PATH");
+        std::env::set_var("GST_REGISTRY_1_0", registry);
+        std::env::set_var("GST_PLUGIN_SCANNER_1_0", scanner);
+        std::env::set_var("CLAPPER_SINK_IMPORTER_PATH", importers);
+    }
 }
 
 /// App log size cap; the previous log is kept as `.old`, so on-disk logging

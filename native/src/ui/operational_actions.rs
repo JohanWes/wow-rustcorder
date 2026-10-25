@@ -192,15 +192,18 @@ pub fn present_test_dialog(parent: &gtk4::Widget, sink: ActionSink, ready: bool)
 
 /// The published install script: adds the signed Flatpak remote and installs
 /// or updates the app.
+#[cfg(unix)]
 const UPDATE_SCRIPT_URL: &str =
     "https://raw.githubusercontent.com/JohanWes/wow-recorder-linuxwayland/main/install.sh";
 
+#[cfg(unix)]
 fn flatpak_available() -> bool {
     std::env::var_os("PATH").is_some_and(|paths| {
         std::env::split_paths(&paths).any(|path| path.join("flatpak").is_file())
     })
 }
 
+#[cfg(unix)]
 fn info_dialog(parent: &gtk4::Widget, heading: &str, body: &str) {
     let dialog = adw::AlertDialog::new(Some(heading), Some(body));
     dialog.add_responses(&[("close", "Close")]);
@@ -212,15 +215,14 @@ fn info_dialog(parent: &gtk4::Widget, heading: &str, body: &str) {
 /// app updates; without Flatpak, say what is missing; otherwise confirm and
 /// run the install script off the GTK thread.
 pub fn present_update_dialog(parent: &gtk4::Widget) {
-    if cfg!(windows) {
-        info_dialog(
-            parent,
-            "Check the releases page",
-            "Download the latest Windows installer from \
-             github.com/JohanWes/wow-recorder-linuxwayland/releases.",
-        );
-        return;
-    }
+    #[cfg(windows)]
+    super::windows_update::check(parent);
+    #[cfg(unix)]
+    present_flatpak_update_dialog(parent);
+}
+
+#[cfg(unix)]
+fn present_flatpak_update_dialog(parent: &gtk4::Widget) {
     if std::path::Path::new("/.flatpak-info").exists() {
         info_dialog(
             parent,
@@ -254,6 +256,7 @@ pub fn present_update_dialog(parent: &gtk4::Widget) {
 
 /// Runs the install script on GIO's blocking pool: a copy next to the
 /// executable if present (development), otherwise the published one.
+#[cfg(unix)]
 fn run_update(parent: &gtk4::Widget) {
     let parent = parent.clone();
     gtk4::glib::spawn_future_local(async move {
