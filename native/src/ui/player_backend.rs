@@ -58,6 +58,12 @@ impl PlayerBackend {
         player.connect_current_audio_decoder_notify(|player| {
             log_element("audio decoder", player.current_audio_decoder());
         });
+        if cfg!(windows) {
+            match front_stereo_sink() {
+                Ok(sink) => player.set_audio_sink(Some(&sink)),
+                Err(error) => tracing::warn!(%error, "keeping the default audio sink"),
+            }
+        }
         Ok(Self { video, player })
     }
 
@@ -228,6 +234,54 @@ fn cap_if_multiqueue(element: &gst::Element) {
     {
         element.set_property("max-size-bytes", DEMUX_QUEUE_BYTES);
     }
+}
+
+/// An audio sink that plays stereo on the front left and right speakers only,
+/// as Windows does for VLC. WASAPI only takes the device's own channel count,
+/// and GStreamer's own stereo-to-5.1/7.1 upmix halves the fronts and spreads
+/// the rest over center, LFE and surrounds, which virtual-surround headsets
+/// render as muddy. `first-channels` maps channel n to channel n instead and
+/// leaves the extra speakers silent. Nothing may convert between it and the
+/// sink: it would let the matrix settle on stereo and upmix after all.
+///
+/// A mono or stereo device (a Bluetooth headset in hands-free mode is mono)
+/// is offered as itself, so playsink's converter mixes to it as before rather
+/// than the matrix dropping the right channel. The device is checked when a
+/// recording opens; a mid-playback device switch is converted inside the sink.
+fn front_stereo_sink() -> Result<gst::Bin, glib::Error> {
+    let bin = gst::parse::bin_from_description(
+        "audiomixmatrix name=matrix mode=first-channels ! wasapi2sink name=device",
+        true,
+    )?;
+    let pad = |name| {
+        bin.by_name(name)
+            .and_then(|element| element.static_pad("sink"))
+            .expect("the sink bin has both elements")
+    };
+    let device = pad("device");
+    pad("matrix").add_probe(
+        gst::PadProbeType::QUERY_DOWNSTREAM | gst::PadProbeType::PULL,
+        move |_, info| {
+            if let Some(gst::QueryViewMut::Caps(query)) = info.query_mut().map(|q| q.view_mut())
+                && let Some(result) = query.result_owned()
+            {
+                let device_caps = device.query_caps(None);
+                if at_most_stereo(&device_caps) {
+                    query.set_result(&result.intersect(&device_caps));
+                }
+            }
+            gst::PadProbeReturn::Ok
+        },
+    );
+    Ok(bin)
+}
+
+fn at_most_stereo(caps: &gst::Caps) -> bool {
+    !caps.is_any()
+        && !caps.is_empty()
+        && caps
+            .iter()
+            .all(|structure| matches!(structure.get::<i32>("channels"), Ok(1 | 2)))
 }
 
 /// Which decoder playback picked: hardware (d3d11*, va*, nv*) or software.

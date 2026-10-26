@@ -79,11 +79,12 @@ build_rust() {
 # GStreamer plugins the player needs: containers, parsers, D3D11 hardware
 # video decoders (any GPU that recorded a file can decode it), OpenH264 as
 # the software fallback, Media Foundation's AAC decoder, deinterlace (on in
-# Clapper by default), scaletempo (audiofx) for playback speed, GL, WASAPI.
+# Clapper by default), scaletempo (audiofx) for playback speed, GL, WASAPI,
+# audiomixmatrix to keep stereo on the front speakers of 5.1/7.1 devices.
 # gst-libav is left out: MSYS2's FFmpeg drags in ~120 MB of codecs.
 plugins=(coreelements playback typefindfunctions isomp4 matroska audioparsers
     videoparsersbad d3d11 openh264 mediafoundation deinterlace audiofx
-    audioconvert audioresample volume autodetect wasapi2 opengl
+    audioconvert audioresample volume autodetect wasapi2 audiomixmatrix opengl
     videoconvertscale app pbtypes overlaycomposition clapper)
 
 app=$work/app
