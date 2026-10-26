@@ -1928,7 +1928,9 @@ fn latest_log_write_ms(config: &Config) -> i64 {
             std::fs::read_dir(dir).ok()
         })
         .flatten()
-        .filter_map(|entry| entry.ok()?.metadata().ok()?.modified().ok())
+        // The file's own time, not the listing's: Windows' directory listing
+        // lags for files the game holds open, such as the live combat log.
+        .filter_map(|entry| std::fs::metadata(entry.ok()?.path()).ok()?.modified().ok())
         .filter_map(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|since| since.as_millis() as i64)
         .max()
