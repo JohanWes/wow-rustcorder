@@ -231,12 +231,7 @@ impl Setup {
             ipc_socket: ipc_socket_path(&data_dir),
             data_dir,
             config_path,
-            // Windows resolves a bare name in the app's own folder first.
-            gsr_binary: PathBuf::from(if cfg!(windows) {
-                "wr-capture"
-            } else {
-                "gpu-screen-recorder"
-            }),
+            gsr_binary: PathBuf::from(crate::recorder::RECORDER_BINARY),
             media: MediaConfig {
                 utc_offset_minutes,
                 ..MediaConfig::default()
@@ -738,7 +733,10 @@ impl Coordinator {
                     self.armed = false;
                     self.push_capture_problem(
                         CAPTURE_STOPPED_PROBLEM,
-                        Some(format!("gpu-screen-recorder exited with code {code:?}")),
+                        Some(format!(
+                            "{} exited with code {code:?}",
+                            crate::recorder::RECORDER_BINARY
+                        )),
                     );
                     if let Some(active) = self.active.take() {
                         self.pending_test_end = None;

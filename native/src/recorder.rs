@@ -169,6 +169,12 @@ impl Default for Timeouts {
     }
 }
 
+/// The capture child; Windows resolves the bare name in the app's folder first.
+pub const RECORDER_BINARY: &str = if cfg!(windows) {
+    "wr-capture"
+} else {
+    "gpu-screen-recorder"
+};
 const GSR_EXIT_SELECTION_DENIED: i32 = 60;
 const MAX_RESTART_DELAY_SECONDS: u64 = 30;
 /// A child that ran this long before exiting was not crash-looping.
@@ -428,13 +434,13 @@ impl Recorder {
             Ok(status) if status.success() => {}
             Ok(status) => {
                 return Err(RecorderError::SpawnFailed {
-                    message: format!("gpu-screen-recorder --version failed: {status}"),
+                    message: format!("{RECORDER_BINARY} --version failed: {status}"),
                     log_tail: String::new(),
                 });
             }
             Err(error) => {
                 return Err(RecorderError::SpawnFailed {
-                    message: format!("gpu-screen-recorder not available: {error}"),
+                    message: format!("{RECORDER_BINARY} not available: {error}"),
                     log_tail: String::new(),
                 });
             }
@@ -529,7 +535,7 @@ impl Recorder {
                     return Err(RecorderError::SelectionDenied { log_tail });
                 }
                 return Err(RecorderError::SpawnFailed {
-                    message: format!("gpu-screen-recorder exited immediately: {status}"),
+                    message: format!("{RECORDER_BINARY} exited immediately: {status}"),
                     log_tail,
                 });
             }
@@ -545,7 +551,7 @@ impl Recorder {
         let Some(ipc) = ipc else {
             let _ = process::terminate(&mut child, self.timeouts.exit_grace);
             return Err(RecorderError::SpawnFailed {
-                message: "gpu-screen-recorder IPC socket did not appear".to_string(),
+                message: format!("{RECORDER_BINARY} IPC did not come up"),
                 log_tail: process::read_log_tail(&Self::log_path(config)),
             });
         };
