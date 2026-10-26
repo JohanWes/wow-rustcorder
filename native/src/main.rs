@@ -152,7 +152,9 @@ fn log_panics() {
 /// The installed app (`bin/` beside `lib/gstreamer-1.0/`) loads only its own
 /// GStreamer plugins, with a registry of its own, so another GStreamer on the
 /// machine can neither leak plugins in nor share a stale registry. Runs before
-/// any other thread exists.
+/// any other thread exists. The registry is named after the display adapters:
+/// GStreamer caches which hardware decoders exist and only rescans when plugin
+/// files change, so a new GPU or driver would otherwise keep software decoding.
 #[cfg(windows)]
 fn isolate_gstreamer() {
     let Some(root) = std::env::current_exe()
@@ -169,7 +171,7 @@ fn isolate_gstreamer() {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.clone())
         .join(warcraft_recorder::config::APP_ID)
-        .join("gstreamer-registry.bin");
+        .join(format!("gstreamer-registry-{:016x}.bin", gpu_fingerprint()));
     let scanner = root.join("libexec/gstreamer-1.0/gst-plugin-scanner.exe");
     // Clapper's own Windows lookup resolves relative to lib/gstreamer-1.0.
     let importers = root.join("lib/clapper-0.0/gst/plugin/importers");
@@ -182,6 +184,25 @@ fn isolate_gstreamer() {
         std::env::set_var("GST_PLUGIN_SCANNER_1_0", scanner);
         std::env::set_var("CLAPPER_SINK_IMPORTER_PATH", importers);
     }
+}
+
+/// Hash of every display adapter's hardware ID and driver-provided name.
+#[cfg(windows)]
+fn gpu_fingerprint() -> u64 {
+    use std::hash::{Hash, Hasher};
+    use windows_sys::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for index in 0.. {
+        // SAFETY: DISPLAY_DEVICEW is plain data; cb is set as the API requires.
+        let mut device: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
+        device.cb = size_of::<DISPLAY_DEVICEW>() as u32;
+        if unsafe { EnumDisplayDevicesW(std::ptr::null(), index, &mut device, 0) } == 0 {
+            break;
+        }
+        device.DeviceID.hash(&mut hasher);
+        device.DeviceString.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 /// App log size cap; the previous log is kept as `.old`, so on-disk logging
