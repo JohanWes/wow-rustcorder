@@ -197,14 +197,15 @@ fn setup(root: &Path) -> Setup {
 fn spawn_tree(name: &str) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let root = std::env::temp_dir().join(format!("wr-slice-{name}-{}", uuid::Uuid::new_v4()));
     let library = root.join("recordings with space");
-    let capture_root = root.join("buffer");
+    // GSR's capture directories live under the library.
+    let capture_root = library.clone();
     let log_dir = root.join("wow/_retail_/Logs");
-    for directory in [&library, &capture_root, &log_dir] {
+    for directory in [&library, &log_dir] {
         fs::create_dir_all(directory).unwrap();
     }
     let log_file = log_dir.join("WoWCombatLog.txt");
     fs::write(&log_file, b"").unwrap();
-    write_config(&root, &library, &capture_root, &log_dir);
+    write_config(&root, &library, &log_dir);
     (root, library, capture_root, log_file)
 }
 
@@ -214,7 +215,7 @@ fn fixture_bin(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn write_config(root: &Path, library: &Path, capture_root: &Path, log_dir: &Path) {
+fn write_config(root: &Path, library: &Path, log_dir: &Path) {
     let config = Config {
         flavors: warcraft_recorder::config::FlavorSettings {
             retail: FlavorConfig {
@@ -231,8 +232,6 @@ fn write_config(root: &Path, library: &Path, capture_root: &Path, log_dir: &Path
         },
         storage: StorageSettings {
             recording_dir: AuthorizedPath::authorized(library),
-            separate_buffer_dir: true,
-            buffer_dir: AuthorizedPath::authorized(capture_root),
             limit: StorageLimit::Unlimited,
         },
         manual: ManualSettings {

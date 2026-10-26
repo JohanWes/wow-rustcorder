@@ -17,8 +17,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    Category, Codec, DeathMarkerVisibility, MarkerVisibility, RaidDifficulty, ReplayStorage,
-    StorageLimit,
+    Category, Codec, DeathMarkerVisibility, MarkerVisibility, RaidDifficulty, StorageLimit,
 };
 
 const CONFIG_VERSION: u32 = 1;
@@ -150,8 +149,6 @@ impl ActivitySettings {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageSettings {
     pub recording_dir: AuthorizedPath,
-    pub separate_buffer_dir: bool,
-    pub buffer_dir: AuthorizedPath,
     pub limit: StorageLimit,
 }
 
@@ -159,8 +156,6 @@ impl Default for StorageSettings {
     fn default() -> Self {
         Self {
             recording_dir: AuthorizedPath::unset(),
-            separate_buffer_dir: false,
-            buffer_dir: AuthorizedPath::unset(),
             limit: StorageLimit::Gib(NonZeroU64::new(50).expect("50 is nonzero")),
         }
     }
@@ -171,13 +166,22 @@ pub struct CaptureSettings {
     pub fps: u32,
     pub codec: Codec,
     pub bitrate_kbps: u32,
-    pub replay_buffer_seconds: u32,
     pub extra_lead_in_seconds: u32,
-    pub replay_storage: ReplayStorage,
     pub capture_cursor: bool,
     pub audio_output: String,
     pub audio_input: Option<String>,
     pub capture_target_token: Option<String>,
+}
+
+/// The combat log reveals activities within a fraction of a second, so the
+/// replay buffer only has to hold the lead-in plus this margin, which also
+/// covers a capture that starts while the previous one is still saving.
+const REPLAY_MARGIN_SECONDS: u32 = 10;
+
+impl CaptureSettings {
+    pub fn replay_buffer_seconds(&self) -> u32 {
+        self.extra_lead_in_seconds + REPLAY_MARGIN_SECONDS
+    }
 }
 
 impl Default for CaptureSettings {
@@ -186,9 +190,7 @@ impl Default for CaptureSettings {
             fps: 60,
             codec: Codec::H264,
             bitrate_kbps: 20_000,
-            replay_buffer_seconds: 60,
             extra_lead_in_seconds: 0,
-            replay_storage: ReplayStorage::Ram,
             capture_cursor: false,
             audio_output: "default_output".to_owned(),
             audio_input: None,
@@ -317,16 +319,6 @@ impl Config {
             &self.storage.recording_dir,
         );
 
-        if self.storage.separate_buffer_dir {
-            validate_active_path(
-                &mut problems,
-                "storage.buffer_dir",
-                "Choose a replay-buffer directory.",
-                "Choose the replay-buffer directory again to authorize access.",
-                &self.storage.buffer_dir,
-            );
-        }
-
         if !self
             .flavors
             .in_field_order()
@@ -363,12 +355,11 @@ impl Config {
             ));
         }
 
-        for (field, path) in [
-            ("storage.recording_dir", &self.storage.recording_dir),
-            ("storage.buffer_dir", &self.storage.buffer_dir),
-        ] {
-            validate_path_state(&mut problems, field, path);
-        }
+        validate_path_state(
+            &mut problems,
+            "storage.recording_dir",
+            &self.storage.recording_dir,
+        );
         for (field, flavor) in self.flavors.in_field_order() {
             validate_path_state(&mut problems, field, &flavor.log_dir);
         }
@@ -384,16 +375,10 @@ impl Config {
                 "Bitrate must be between 1000 and 200000 Kbps.",
             ));
         }
-        if !(30..=600).contains(&self.capture.replay_buffer_seconds) {
-            problems.push(ValidationProblem::new(
-                "capture.replay_buffer_seconds",
-                "Replay buffer must be between 30 and 600 seconds.",
-            ));
-        }
         if self.capture.extra_lead_in_seconds > 30 {
             problems.push(ValidationProblem::new(
                 "capture.extra_lead_in_seconds",
-                "Extra lead-in must be between 0 and 30 seconds.",
+                "Lead-in must be between 0 and 30 seconds.",
             ));
         }
         if self.capture.audio_output.trim().is_empty() {
@@ -798,13 +783,6 @@ mod tests {
                 }),
             ),
             (
-                "storage.buffer_dir",
-                Box::new(|config| {
-                    config.storage.separate_buffer_dir = true;
-                    config.storage.buffer_dir = AuthorizedPath::unset();
-                }),
-            ),
-            (
                 "flavors.retail",
                 Box::new(|config| config.flavors.retail.log_dir = AuthorizedPath::unset()),
             ),
@@ -844,14 +822,8 @@ mod tests {
             path: PathBuf::from("/recordings#old"),
             authorization: PathAuthorization::ImportedInactive,
         };
-        config.storage.separate_buffer_dir = true;
-        config.storage.buffer_dir = AuthorizedPath {
-            path: PathBuf::from("/recordings#old"),
-            authorization: PathAuthorization::ImportedInactive,
-        };
         config.capture.fps = 14;
         config.capture.bitrate_kbps = 999;
-        config.capture.replay_buffer_seconds = 29;
         config.capture.extra_lead_in_seconds = 31;
         config.capture.audio_output.clear();
         config.activities.min_raid_duration_seconds = 10_001;
@@ -877,14 +849,12 @@ mod tests {
                 "version",
                 "capture.fps",
                 "capture.bitrate_kbps",
-                "capture.replay_buffer_seconds",
                 "capture.extra_lead_in_seconds",
                 "capture.audio_output",
                 "activities.min_raid_duration_seconds",
                 "activities.raid_overrun_seconds",
                 "activities.dungeon_overrun_seconds",
                 "storage.recording_dir",
-                "storage.buffer_dir",
                 "flavors.retail",
                 "activities",
             ]

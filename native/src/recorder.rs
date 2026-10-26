@@ -32,7 +32,6 @@ use serde_json::{Value, json};
 
 use crate::config::CaptureSettings;
 #[cfg(unix)]
-use crate::domain::ReplayStorage;
 use crate::domain::{Category, Codec, RecordingId};
 use crate::process;
 use crate::storage::now_unix_ms;
@@ -1014,7 +1013,7 @@ impl Recorder {
     }
 }
 
-/// `wr-capture` finds the WoW window itself and only knows RAM replay.
+/// `wr-capture` finds the WoW window itself.
 #[cfg(windows)]
 fn build_wr_capture_args(config: &CaptureConfig) -> Vec<OsString> {
     let settings = &config.settings;
@@ -1027,7 +1026,7 @@ fn build_wr_capture_args(config: &CaptureConfig) -> Vec<OsString> {
         "-w".into(),
         "Wow.exe".into(),
         "-r".into(),
-        settings.replay_buffer_seconds.to_string().into(),
+        settings.replay_buffer_seconds().to_string().into(),
         "-f".into(),
         settings.fps.to_string().into(),
         "-q".into(),
@@ -1072,10 +1071,6 @@ fn build_gsr_args(config: &CaptureConfig) -> Vec<OsString> {
         Codec::Hevc => "hevc",
         Codec::Av1 => "av1",
     };
-    let storage = match settings.replay_storage {
-        ReplayStorage::Ram => "ram",
-        ReplayStorage::Disk => "disk",
-    };
     let mut args: Vec<OsString> = vec![
         "-w".into(),
         "portal".into(),
@@ -1084,9 +1079,9 @@ fn build_gsr_args(config: &CaptureConfig) -> Vec<OsString> {
         "-portal-session-token-filepath".into(),
         Recorder::token_path(config).into_os_string(),
         "-r".into(),
-        settings.replay_buffer_seconds.to_string().into(),
+        settings.replay_buffer_seconds().to_string().into(),
         "-replay-storage".into(),
-        storage.into(),
+        "ram".into(),
         "-restart-replay-on-save".into(),
         "no".into(),
         "-c".into(),

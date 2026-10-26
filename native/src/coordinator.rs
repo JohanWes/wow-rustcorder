@@ -900,7 +900,7 @@ impl Coordinator {
         if self.standby {
             self.arm();
         }
-        let capacity_ms = u64::from(self.config.capture.replay_buffer_seconds) * 1_000;
+        let capacity_ms = u64::from(self.config.capture.replay_buffer_seconds()) * 1_000;
         let lead_in_ms = i64::from(self.config.capture.extra_lead_in_seconds) * 1_000;
         let requested_replay_ms = (late_by_ms + lead_in_ms).clamp(0, capacity_ms as i64) as u64;
         tracing::info!(
@@ -1544,9 +1544,7 @@ impl Coordinator {
 
         let logs_changed = draft.flavors != self.config.flavors
             || draft.validate_log_paths != self.config.validate_log_paths;
-        let storage_changed = draft.storage.recording_dir != self.config.storage.recording_dir
-            || draft.storage.separate_buffer_dir != self.config.storage.separate_buffer_dir
-            || draft.storage.buffer_dir != self.config.storage.buffer_dir;
+        let storage_changed = draft.storage.recording_dir != self.config.storage.recording_dir;
         let capture_changed = draft.capture != self.config.capture;
         let limit_changed = draft.storage.limit != self.config.storage.limit;
 
@@ -1864,14 +1862,9 @@ fn make_problem(
     }
 }
 
-/// GSR's `replay`/`regular`/`staging` directories live under the replay-buffer
-/// directory when one is configured, and under the library root otherwise.
+/// GSR's `replay`/`regular`/`staging` directories live under the library root.
 fn capture_root(config: &Config) -> PathBuf {
-    if config.storage.separate_buffer_dir {
-        config.storage.buffer_dir.path.clone()
-    } else {
-        config.storage.recording_dir.path.clone()
-    }
+    config.storage.recording_dir.path.clone()
 }
 
 fn build_storage(config: &Config) -> Storage {

@@ -88,13 +88,6 @@ pub enum Codec {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ReplayStorage {
-    Ram,
-    Disk,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum DeathMarkerVisibility {
     None,
     Own,

@@ -22,9 +22,7 @@ use libadwaita::prelude::*;
 
 use warcraft_recorder::config::{AuthorizedPath, Config, ValidationProblem};
 use warcraft_recorder::coordinator::{AppSnapshot, Command};
-use warcraft_recorder::domain::{
-    Codec, RaidDifficulty, RecorderStatus, ReplayStorage, StorageLimit,
-};
+use warcraft_recorder::domain::{Codec, RaidDifficulty, RecorderStatus, StorageLimit};
 use warcraft_recorder::recorder::{AudioDevice, Recorder};
 use warcraft_recorder::storage::now_unix_ms;
 
@@ -78,43 +76,25 @@ pub struct EnabledAccess {
     pub set: fn(&mut Config, bool),
 }
 
-pub static CAPTURE_COMBOS: [ComboSpec; 2] = [
-    ComboSpec {
-        field: "capture.codec",
-        title: "Video codec",
-        choices: &["H.264", "HEVC", "AV1"],
-        get: |config| match config.capture.codec {
-            Codec::H264 => 0,
-            Codec::Hevc => 1,
-            Codec::Av1 => 2,
-        },
-        set: |config, index| {
-            config.capture.codec = match index {
-                1 => Codec::Hevc,
-                2 => Codec::Av1,
-                _ => Codec::H264,
-            }
-        },
+pub static CAPTURE_COMBOS: [ComboSpec; 1] = [ComboSpec {
+    field: "capture.codec",
+    title: "Video codec",
+    choices: &["H.264", "HEVC", "AV1"],
+    get: |config| match config.capture.codec {
+        Codec::H264 => 0,
+        Codec::Hevc => 1,
+        Codec::Av1 => 2,
     },
-    ComboSpec {
-        field: "capture.replay_storage",
-        title: "Replay buffer storage",
-        choices: &["RAM", "Disk"],
-        get: |config| match config.capture.replay_storage {
-            ReplayStorage::Ram => 0,
-            ReplayStorage::Disk => 1,
-        },
-        set: |config, index| {
-            config.capture.replay_storage = if index == 1 {
-                ReplayStorage::Disk
-            } else {
-                ReplayStorage::Ram
-            }
-        },
+    set: |config, index| {
+        config.capture.codec = match index {
+            1 => Codec::Hevc,
+            2 => Codec::Av1,
+            _ => Codec::H264,
+        }
     },
-];
+}];
 
-pub static CAPTURE_SPINS: [SpinSpec; 4] = [
+pub static CAPTURE_SPINS: [SpinSpec; 3] = [
     SpinSpec {
         field: "capture.fps",
         title: "FPS",
@@ -136,19 +116,9 @@ pub static CAPTURE_SPINS: [SpinSpec; 4] = [
         set: |config, value| config.capture.bitrate_kbps = value as u32,
     },
     SpinSpec {
-        field: "capture.replay_buffer_seconds",
-        title: "Replay buffer",
-        subtitle: "Seconds of lead-in kept before an activity is detected (30–600)",
-        min: 30.0,
-        max: 600.0,
-        step: 10.0,
-        get: |config| f64::from(config.capture.replay_buffer_seconds),
-        set: |config, value| config.capture.replay_buffer_seconds = value as u32,
-    },
-    SpinSpec {
         field: "capture.extra_lead_in_seconds",
-        title: "Extra lead-in",
-        subtitle: "Seconds added to the measured detection delay (0–30)",
+        title: "Lead-in",
+        subtitle: "Seconds recorded before an activity starts (0–30)",
         min: 0.0,
         max: 30.0,
         step: 1.0,
@@ -346,14 +316,7 @@ pub static STORAGE_SPINS: [SpinSpec; 1] = [SpinSpec {
     },
 }];
 
-pub static INTERFACE_SWITCHES: [SwitchSpec; 5] = [
-    SwitchSpec {
-        field: "storage.separate_buffer_dir",
-        title: "Separate replay-buffer folder",
-        subtitle: "Store the disk replay buffer outside the recording folder",
-        get: |config| config.storage.separate_buffer_dir,
-        set: |config, value| config.storage.separate_buffer_dir = value,
-    },
+pub static INTERFACE_SWITCHES: [SwitchSpec; 4] = [
     SwitchSpec {
         field: "interface.hide_empty_categories",
         title: "Hide empty categories",
@@ -384,7 +347,7 @@ pub static INTERFACE_SWITCHES: [SwitchSpec; 5] = [
     },
 ];
 
-pub static PATHS: [PathSpec; 7] = [
+pub static PATHS: [PathSpec; 6] = [
     PathSpec {
         field: "flavors.retail",
         title: "Retail",
@@ -448,14 +411,6 @@ pub static PATHS: [PathSpec; 7] = [
         set: |config, path| config.storage.recording_dir = path,
         enabled: None,
     },
-    PathSpec {
-        field: "storage.buffer_dir",
-        title: "Replay-buffer folder",
-        needs_write: true,
-        get: |config| &config.storage.buffer_dir,
-        set: |config, path| config.storage.buffer_dir = path,
-        enabled: None,
-    },
 ];
 
 /// Dependency sensitivity: a disabled parent greys its children without
@@ -469,7 +424,6 @@ pub fn row_sensitive(field: &str, config: &Config) -> bool {
         "activities.min_keystone_level" | "activities.dungeon_overrun_seconds" => {
             config.activities.record_dungeons
         }
-        "storage.buffer_dir" => config.storage.separate_buffer_dir,
         "manual.sound" => config.manual.enabled,
         "capture.audio_input" => config.capture.audio_input.is_some(),
         _ => true,
@@ -656,7 +610,6 @@ impl Settings {
         for spec in &CAPTURE_SWITCHES {
             capture_group.add(&switch_row(spec, &draft, &registry, &refresh));
         }
-        capture_group.add(&combo_row(&CAPTURE_COMBOS[1], &draft, &registry, &refresh));
         capture_page.add(&capture_group);
 
         let target_group = adw::PreferencesGroup::new();
@@ -801,18 +754,10 @@ impl Settings {
         let storage_page = adw::PreferencesPage::new();
         let storage_group = adw::PreferencesGroup::new();
         storage_group.set_title("Storage");
-        for (index, spec) in PATHS.iter().enumerate().skip(5) {
+        for spec in PATHS.iter().skip(5) {
             let (row, select) = path_row(spec, &draft, &registry, &refresh, parent);
             gated.push(select.upcast());
             storage_group.add(&row);
-            if index == 5 {
-                storage_group.add(&switch_row(
-                    &INTERFACE_SWITCHES[0],
-                    &draft,
-                    &registry,
-                    &refresh,
-                ));
-            }
         }
         for spec in &STORAGE_SPINS {
             storage_group.add(&spin_row(spec, &draft, &registry, &refresh));
@@ -829,7 +774,7 @@ impl Settings {
 
         let interface_group = adw::PreferencesGroup::new();
         interface_group.set_title("Interface");
-        for spec in INTERFACE_SWITCHES.iter().skip(1) {
+        for spec in &INTERFACE_SWITCHES {
             interface_group.add(&switch_row(spec, &draft, &registry, &refresh));
         }
         let tray_note = gtk4::Label::new(Some(
@@ -1319,10 +1264,8 @@ fn combo_row(
 
 /// A required folder that is unset, or one whose authorization did not
 /// survive the move into the sandbox, is the only thing standing between a
-/// fresh install and a working recorder. Rows the user
-/// does not have to fill in stay quiet: a greyed-out dependant such as the
-/// replay-buffer folder while it shares the recording folder, and the log
-/// folder of a flavour that is switched off.
+/// fresh install and a working recorder. Rows the user does not have to fill
+/// in stay quiet: the log folder of a flavour that is switched off.
 fn path_needs_attention(field: &str, config: &Config) -> bool {
     let Some(spec) = PATHS.iter().find(|spec| spec.field == field) else {
         return false;
@@ -1469,17 +1412,9 @@ mod tests {
     #[test]
     fn only_folders_the_user_must_pick_ask_for_attention() {
         let mut config = ready_config();
-        // Both required folders are set, and the buffer folder shares the
-        // recording folder: nothing to ask for.
+        // Both required folders are set: nothing to ask for.
         assert!(!path_needs_attention("storage.recording_dir", &config));
         assert!(!path_needs_attention("flavors.retail", &config));
-        assert!(!path_needs_attention("storage.buffer_dir", &config));
-
-        // Turning the dependant on exposes it as unset, and only then.
-        config.storage.separate_buffer_dir = true;
-        assert!(path_needs_attention("storage.buffer_dir", &config));
-        config.storage.buffer_dir = AuthorizedPath::authorized("/buffer");
-        assert!(!path_needs_attention("storage.buffer_dir", &config));
 
         // Unset, and imported-but-unauthorized, both ask.
         config.storage.recording_dir = AuthorizedPath::unset();
