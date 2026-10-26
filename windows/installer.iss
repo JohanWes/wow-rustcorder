@@ -45,6 +45,10 @@ Type: filesandordirs; Name: "{app}\lib"
 Type: filesandordirs; Name: "{app}\libexec"
 Type: filesandordirs; Name: "{app}\share"
 
+[UninstallDelete]
+; GStreamer's plugin cache. Settings, logs and recordings stay.
+Type: filesandordirs; Name: "{localappdata}\io.github.JohanWes.WarcraftRecorder"
+
 [Files]
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
@@ -57,3 +61,19 @@ Filename: "{app}\bin\warcraft-recorder.exe"; Description: "Start Warcraft Record
 ; In-app updates run silently; start the new version afterwards.
 Filename: "{app}\bin\warcraft-recorder.exe"; Flags: nowait; Check: WizardSilent
 
+[Code]
+// The uninstaller does not close running apps the way setup does: stop the
+// app, its recorder and its gdbus helper, all of which run from {app}.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Dir: String;
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Dir := ExpandConstant('{app}');
+    StringChangeEx(Dir, '''', '''''', True);
+    Exec('powershell.exe', '-NoProfile -NonInteractive -Command "Get-Process | Where-Object { $_.Path -like ''' + Dir + '\*'' } | Stop-Process -Force; Start-Sleep 1"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
