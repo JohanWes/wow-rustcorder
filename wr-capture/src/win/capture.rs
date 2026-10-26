@@ -242,8 +242,10 @@ struct Capture {
     winrt_device: IDirect3DDevice,
     target: Target,
     cursor: bool,
-    /// Shortest gap between captured frames, in 100 ns: about one recorded
-    /// frame, so a 174 fps game is not copied 174 times a second.
+    /// Shortest gap between captured frames, in 100 ns: half a recorded
+    /// frame, so a 174 fps game is not copied 174 times a second. Frames
+    /// only arrive on display refreshes, so a whole frame's gap would often
+    /// land a refresh late and skip recorded frames.
     min_interval: i64,
     active: Option<Active>,
     next_search: Instant,
@@ -265,7 +267,7 @@ impl Capture {
             winrt_device,
             target: options.target.clone(),
             cursor: options.cursor,
-            min_interval: (10_000_000 / i64::from(options.fps) - 10_000).max(10_000),
+            min_interval: (5_000_000 / i64::from(options.fps)).max(10_000),
             active: None,
             next_search: Instant::now(),
             latest: None,
