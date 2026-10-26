@@ -8,6 +8,7 @@ mod audio;
 mod capture;
 mod convert;
 mod encoder;
+mod stats;
 
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -42,6 +43,7 @@ pub struct Shared {
     /// Process id of the captured window, 0 while there is none; the audio
     /// thread follows it for app-only audio.
     pub target_pid: AtomicU32,
+    pub frames: stats::FrameStats,
 }
 
 /// 100 ns ticks since the first call, from the QPC clock that both Windows
@@ -94,6 +96,7 @@ pub fn run(options: Options) -> i32 {
     let shared = Arc::new(Shared {
         keyframe: AtomicBool::new(false),
         target_pid: AtomicU32::new(0),
+        frames: stats::FrameStats::default(),
     });
     let (sender, receiver) = mpsc::channel();
 
@@ -123,6 +126,10 @@ pub fn run(options: Options) -> i32 {
     std::thread::spawn({
         let sender = sender.clone();
         move || read_requests(sender)
+    });
+    std::thread::spawn({
+        let shared = shared.clone();
+        move || stats::run(shared)
     });
     drop(sender);
 

@@ -1012,7 +1012,8 @@ impl Recorder {
     }
 }
 
-/// `wr-capture` finds the WoW window itself.
+/// `wr-capture` finds the WoW window itself. Retail, PTR, Classic (Era too)
+/// and Classic PTR each run their own exe.
 #[cfg(windows)]
 fn build_wr_capture_args(config: &CaptureConfig) -> Vec<OsString> {
     let settings = &config.settings;
@@ -1023,7 +1024,7 @@ fn build_wr_capture_args(config: &CaptureConfig) -> Vec<OsString> {
     };
     let mut args: Vec<OsString> = vec![
         "-w".into(),
-        "Wow.exe".into(),
+        "Wow.exe|WowT.exe|WowClassic.exe|WowClassicT.exe".into(),
         "-r".into(),
         settings.replay_buffer_seconds().to_string().into(),
         "-f".into(),

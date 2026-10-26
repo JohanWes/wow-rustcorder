@@ -629,7 +629,7 @@ impl Settings {
             });
         }
         gated.push(reselect.clone().upcast());
-        // wr-capture follows the Wow.exe window by itself.
+        // wr-capture follows the WoW window by itself.
         reselect.set_visible(cfg!(unix));
         target_row.add_suffix(&reselect);
         target_group.add(&target_row);

@@ -2,7 +2,7 @@
 
 //! `wr-capture`: the Windows stand-in for gpu-screen-recorder's replay mode.
 //!
-//! It captures a window (by executable name) or the primary monitor with
+//! It captures a window (by executable names) or the primary monitor with
 //! Windows Graphics Capture, encodes with the GPU's Media Foundation encoder,
 //! mixes WASAPI audio into AAC, and keeps the last seconds in RAM. Requests
 //! arrive as GSR `-ipc` JSON lines on stdin and replies leave on stdout; logs
@@ -24,8 +24,9 @@ use packet::VideoCodec;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target {
-    /// The first visible top-level window of this executable, e.g. `Wow.exe`.
-    Exe(String),
+    /// The first visible top-level window of any of these executables, e.g.
+    /// `Wow.exe` and `WowClassic.exe`.
+    Exe(Vec<String>),
     PrimaryMonitor,
 }
 
@@ -53,13 +54,13 @@ pub struct Options {
     pub size: Option<(u32, u32)>,
 }
 
-const USAGE: &str = "usage: wr-capture -o <replay dir> -ro <regular dir> [-w Wow.exe|monitor] \
+const USAGE: &str = "usage: wr-capture -o <replay dir> -ro <regular dir> [-w Wow.exe|WowClassic.exe...|monitor] \
 [-f fps] [-q kbps] [-k h264|hevc|av1] [-r seconds] [-a app|default_output|default_input ...] \
 [-cursor yes|no] [-s WxH] | --version | --list-audio-devices";
 
 fn parse(args: &[String]) -> Result<Options, String> {
     let mut options = Options {
-        target: Target::Exe("Wow.exe".into()),
+        target: Target::Exe(vec!["Wow.exe".into()]),
         fps: 60,
         bitrate_kbps: 20_000,
         codec: VideoCodec::H264,
@@ -80,7 +81,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
         };
         match flag.as_str() {
             "-w" if value == "monitor" => options.target = Target::PrimaryMonitor,
-            "-w" => options.target = Target::Exe(value.clone()),
+            "-w" => options.target = Target::Exe(value.split('|').map(String::from).collect()),
             "-f" => options.fps = number()?.clamp(1, 240),
             "-q" => options.bitrate_kbps = number()?.max(500),
             "-k" => {
@@ -172,6 +173,12 @@ mod tests {
         assert_eq!(options.audio, [AudioSource::App, AudioSource::DefaultInput]);
         assert!(!options.cursor);
         assert_eq!(options.size, Some((1920, 1080)));
+        assert_eq!(
+            parse(&args("-w Wow.exe|WowClassic.exe -o R -ro V"))
+                .unwrap()
+                .target,
+            Target::Exe(vec!["Wow.exe".into(), "WowClassic.exe".into()])
+        );
         assert!(parse(&args("-o R")).is_err());
         assert!(parse(&args("-o R -ro V -k vp9")).is_err());
     }

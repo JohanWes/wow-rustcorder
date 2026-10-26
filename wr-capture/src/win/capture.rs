@@ -25,7 +25,7 @@ use windows::Win32::Graphics::Direct3D11::{
     ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
-use windows::Win32::Graphics::Dxgi::IDXGIDevice;
+use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint,
 };
@@ -96,13 +96,17 @@ pub fn run(
             std::thread::sleep(Duration::from_nanos((due - now) as u64 * 100));
         } else if now - due > 20_000_000 / fps {
             // Fell more than two frames behind: drop the missed ticks.
-            index = (now - start) * fps / 10_000_000;
+            let caught_up = (now - start) * fps / 10_000_000;
+            shared.frames.dropped(caught_up - index);
+            index = caught_up;
             due = start + index * 10_000_000 / fps;
         }
-        capture.poll(&context, shared);
+        let work = Instant::now();
+        let fresh = capture.poll(&context, shared);
         let frame = converter.convert(capture.latest.as_ref())?;
         let keyframe = shared.keyframe.swap(false, Ordering::Relaxed);
         encoder.encode_video(&frame, due, 10_000_000 / fps, keyframe, &mut packets)?;
+        shared.frames.encoded(fresh, work.elapsed());
         for packet in packets.drain(..) {
             if sender.send(Message::Packet(packet)).is_err() {
                 return Ok(());
@@ -133,12 +137,57 @@ fn create_device() -> Result<(ID3D11Device, ID3D11DeviceContext), String> {
         device.ok_or("no Direct3D device")?,
         context.ok_or("no Direct3D context")?,
     );
+    log_adapters(&device);
     // The encoder's Media Foundation threads use the same device.
     let multithread: ID3D11Multithread = context.cast().map_err(fail("query ID3D11Multithread"))?;
     unsafe {
         let _ = multithread.SetMultithreadProtected(true);
     }
     Ok((device, context))
+}
+
+/// Every GPU, marking the one capture and encoding run on: on a laptop with
+/// two GPUs this shows whether the default adapter was the right one.
+fn log_adapters(device: &ID3D11Device) {
+    let used = device
+        .cast::<IDXGIDevice>()
+        .and_then(|dxgi| unsafe { dxgi.GetAdapter() })
+        .and_then(|adapter| unsafe { adapter.GetDesc() })
+        .map(|desc| desc.AdapterLuid);
+    let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else {
+        return;
+    };
+    let mut index = 0;
+    while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
+        index += 1;
+        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+            continue;
+        };
+        let name = String::from_utf16_lossy(&desc.Description);
+        let driver = unsafe { adapter.CheckInterfaceSupport(&IDXGIDevice::IID) }.map_or_else(
+            |_| "unknown".to_string(),
+            |version| {
+                let part = |shift: u32| (version >> shift) & 0xffff;
+                format!("{}.{}.{}.{}", part(48), part(32), part(16), part(0))
+            },
+        );
+        let luid = desc.AdapterLuid;
+        let marker = if used
+            .as_ref()
+            .is_ok_and(|used| (used.LowPart, used.HighPart) == (luid.LowPart, luid.HighPart))
+        {
+            "used"
+        } else {
+            "unused"
+        };
+        eprintln!(
+            "gpu {marker}: {} (vendor {:#06x}, device {:#06x}, driver {driver}, {} MB dedicated)",
+            name.trim_end_matches('\0'),
+            desc.VendorId,
+            desc.DeviceId,
+            desc.DedicatedVideoMemory / (1024 * 1024),
+        );
+    }
 }
 
 fn primary_monitor_size() -> (u32, u32) {
@@ -205,8 +254,8 @@ impl Capture {
         })
     }
 
-    /// Follow the target and copy its newest frame, if any arrived.
-    fn poll(&mut self, context: &ID3D11DeviceContext, shared: &Shared) {
+    /// Follow the target and copy its newest frame; true if one arrived.
+    fn poll(&mut self, context: &ID3D11DeviceContext, shared: &Shared) -> bool {
         if let Some(window) = self.active.as_ref().and_then(|active| active.window)
             && !unsafe { IsWindow(Some(window)) }.as_bool()
         {
@@ -232,9 +281,13 @@ impl Capture {
                 Err(message) => eprintln!("capture start failed: {message}"),
             }
         }
-        if let Err(message) = self.copy_newest(context) {
-            eprintln!("capture failed: {message}");
-            self.stop(shared);
+        match self.copy_newest(context) {
+            Ok(fresh) => fresh,
+            Err(message) => {
+                eprintln!("capture failed: {message}");
+                self.stop(shared);
+                false
+            }
         }
     }
 
@@ -248,8 +301,8 @@ impl Capture {
         let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
             .map_err(fail("get the capture item factory"))?;
         let (item, window): (GraphicsCaptureItem, _) = match &self.target {
-            Target::Exe(exe) => {
-                let Some(window) = find_window(exe) else {
+            Target::Exe(exes) => {
+                let Some(window) = find_window(exes) else {
                     return Ok(None);
                 };
                 let item = unsafe { interop.CreateForWindow(window) }
@@ -288,16 +341,16 @@ impl Capture {
         }))
     }
 
-    fn copy_newest(&mut self, context: &ID3D11DeviceContext) -> Result<(), String> {
+    fn copy_newest(&mut self, context: &ID3D11DeviceContext) -> Result<bool, String> {
         let Some(active) = self.active.as_mut() else {
-            return Ok(());
+            return Ok(false);
         };
         let mut newest = None;
         while let Ok(frame) = active.pool.TryGetNextFrame() {
             newest = Some(frame);
         }
         let Some(frame) = newest else {
-            return Ok(());
+            return Ok(false);
         };
         let size = frame.ContentSize().map_err(fail("read the frame size"))?;
         let texture: ID3D11Texture2D = frame
@@ -324,7 +377,7 @@ impl Capture {
         let width = (size.Width.max(0) as u32).min(desc.Width);
         let height = (size.Height.max(0) as u32).min(desc.Height);
         if width == 0 || height == 0 {
-            return Ok(());
+            return Ok(false);
         }
         if self
             .latest
@@ -343,7 +396,7 @@ impl Capture {
             back: 1,
         };
         unsafe { context.CopySubresourceRegion(latest, 0, 0, 0, 0, &texture, 0, Some(&region)) };
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -373,9 +426,9 @@ pub fn create_bgra(
 }
 
 /// The first visible, unowned top-level window whose process image is `exe`.
-fn find_window(exe: &str) -> Option<HWND> {
+fn find_window(exes: &[String]) -> Option<HWND> {
     struct Search<'a> {
-        exe: &'a str,
+        exes: &'a [String],
         found: Option<HWND>,
     }
     unsafe extern "system" fn visit(window: HWND, lparam: LPARAM) -> BOOL {
@@ -386,13 +439,15 @@ fn find_window(exe: &str) -> Option<HWND> {
         }
         let mut pid = 0;
         unsafe { GetWindowThreadProcessId(window, Some(&mut pid)) };
-        if process_name(pid).is_some_and(|name| name.eq_ignore_ascii_case(search.exe)) {
+        if process_name(pid)
+            .is_some_and(|name| search.exes.iter().any(|exe| name.eq_ignore_ascii_case(exe)))
+        {
             search.found = Some(window);
             return false.into();
         }
         true.into()
     }
-    let mut search = Search { exe, found: None };
+    let mut search = Search { exes, found: None };
     // Stopping early reports an error; the result is in `search`.
     let _ = unsafe { EnumWindows(Some(visit), LPARAM(&mut search as *mut Search as isize)) };
     search.found
