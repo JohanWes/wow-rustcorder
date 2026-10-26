@@ -10,6 +10,11 @@
 //! window at the top edge maximizes it, at a side edge fills that half of the
 //! screen. Dragging a half-screen window away restores its size.
 //!
+//! The same missing frame styles leave Windows' Win+arrow shortcuts and the
+//! system menu without effect, so a keyboard hook, installed only while the
+//! window is active, takes Win+Up/Down/Left/Right and does what Windows would,
+//! and Alt+Space and a right click on the header open GTK's system menu.
+//!
 //! GTK also takes Windows' 9 pt message font, which reads small next to the
 //! 11 pt the layout was designed with, so the font is raised to that.
 //!
@@ -29,12 +34,19 @@ use windows_sys::Win32::Graphics::Gdi::{
     CreateRectRgn, GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
     SetWindowRgn,
 };
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, KEYEVENTF_KEYUP, VK_CONTROL, VK_DOWN, VK_LEFT, VK_LWIN, VK_MENU, VK_RIGHT,
+    VK_RWIN, VK_SHIFT, VK_UP, keybd_event,
+};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetWindowRect, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION, HTCLIENT,
-    HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, IsIconic, IsZoomed, SW_RESTORE, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOZORDER, SetWindowPos, ShowWindow, WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE,
-    WM_MOVING, WM_NCHITTEST, WM_NCLBUTTONDBLCLK, WM_WINDOWPOSCHANGED,
+    CallNextHookEx, GetCursorPos, GetWindowRect, HHOOK, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT,
+    HTCAPTION, HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, IsIconic, IsZoomed,
+    KBDLLHOOKSTRUCT, PostMessageW, SC_KEYMENU, SW_RESTORE, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOZORDER, SendMessageW, SetWindowPos, SetWindowsHookExW, ShowWindow, UnhookWindowsHookEx,
+    WA_INACTIVE, WH_KEYBOARD_LL, WM_ACTIVATE, WM_APP, WM_DESTROY, WM_ENTERSIZEMOVE,
+    WM_EXITSIZEMOVE, WM_KEYDOWN, WM_MOVING, WM_NCHITTEST, WM_NCLBUTTONDBLCLK, WM_NCRBUTTONUP,
+    WM_SYSCOMMAND, WM_SYSKEYDOWN, WM_WINDOWPOSCHANGED,
 };
 
 const MIN_FONT_POINTS: i32 = 11;
@@ -42,6 +54,13 @@ const MIN_FONT_POINTS: i32 = 11;
 const MARGIN: i32 = 12;
 /// How far into the visible edge a resize grab reaches.
 const GRIP: i32 = 4;
+/// Posted by the keyboard hook with the arrow's virtual key.
+const WM_WIN_ARROW: u32 = WM_APP + 1;
+/// GTK's handler for it shows the system menu with the frame styles it needs.
+const WM_SYSMENU: u32 = 0x313;
+/// An unassigned virtual key: pressing it while Win is held stops Windows
+/// opening the Start menu when Win is released after a swallowed arrow.
+const VK_MASK: u8 = 0xE8;
 
 const CSS: &str = "
 window.csd { box-shadow: none; border-radius: 0; }
@@ -64,6 +83,11 @@ struct Drag {
     shift: Cell<Option<i32>>,
     /// Size and margin of the window region last set.
     region: Cell<(i32, i32, i32)>,
+    /// Where a half-screen window came from, for Win+Down.
+    restore_origin: Cell<Option<(i32, i32)>>,
+    tiled: Cell<Option<Side>>,
+    hwnd: Cell<HWND>,
+    hook: Cell<HHOOK>,
 }
 
 thread_local! {
@@ -90,9 +114,53 @@ pub fn setup(window: &adw::ApplicationWindow) {
         // that owns it.
         unsafe {
             let hwnd = gdk_win32_surface_get_handle(surface.as_ptr());
+            DRAG.with(|drag| drag.hwnd.set(hwnd));
             SetWindowSubclass(hwnd, Some(subclass_proc), 1, 0);
             clip_to_content(hwnd);
         }
+    });
+    // GTK forgets where a hidden window was: put it back when shown from
+    // the tray, and place the first one, once GTK has given it a size.
+    let hidden_at = std::rc::Rc::new(Cell::new(None::<RECT>));
+    let saved = std::rc::Rc::clone(&hidden_at);
+    window.connect_unmap(move |_| {
+        let hwnd = DRAG.with(|drag| drag.hwnd.get());
+        let mut frame = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        // SAFETY: our own window, and an out-parameter.
+        unsafe {
+            if IsIconic(hwnd) == 0 && IsZoomed(hwnd) == 0 && GetWindowRect(hwnd, &mut frame) != 0 {
+                saved.set(Some(frame));
+            }
+        }
+    });
+    let placed = Cell::new(false);
+    window.connect_map(move |_| {
+        let first = !placed.replace(true);
+        let frame = hidden_at.take();
+        gtk4::glib::idle_add_local_once(move || {
+            let hwnd = DRAG.with(|drag| drag.hwnd.get());
+            match frame {
+                _ if first => place_on_screen(hwnd),
+                // SAFETY: moving our own window.
+                Some(frame) if unsafe { IsZoomed(hwnd) } == 0 => unsafe {
+                    SetWindowPos(
+                        hwnd,
+                        std::ptr::null_mut(),
+                        frame.left,
+                        frame.top,
+                        frame.right - frame.left,
+                        frame.bottom - frame.top,
+                        SWP_NOZORDER | SWP_NOACTIVATE,
+                    );
+                },
+                _ => {}
+            }
+        });
     });
 }
 
@@ -265,6 +333,35 @@ unsafe extern "system" fn subclass_proc(
                 }
                 result
             }
+            WM_ACTIVATE => {
+                set_keyboard_hook(wparam & 0xFFFF != WA_INACTIVE as WPARAM);
+                DefSubclassProc(hwnd, message, wparam, lparam)
+            }
+            WM_DESTROY => {
+                set_keyboard_hook(false);
+                DefSubclassProc(hwnd, message, wparam, lparam)
+            }
+            WM_WIN_ARROW => {
+                win_arrow(hwnd, wparam as u16);
+                0
+            }
+            // Alt+Space, at the visible top-left corner like Windows.
+            WM_SYSCOMMAND if wparam & 0xFFF0 == SC_KEYMENU as WPARAM && lparam == 0x20 => {
+                let mut frame = RECT {
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                };
+                GetWindowRect(hwnd, &mut frame);
+                let margin = margin(hwnd);
+                let (x, y) = (frame.left + margin, frame.top + margin);
+                let point = ((y as u32 & 0xFFFF) << 16) | (x as u32 & 0xFFFF);
+                SendMessageW(hwnd, WM_SYSMENU, 0, point as LPARAM)
+            }
+            WM_NCRBUTTONUP if wparam == HTCAPTION as WPARAM => {
+                SendMessageW(hwnd, WM_SYSMENU, 0, lparam)
+            }
             _ => DefSubclassProc(hwnd, message, wparam, lparam),
         }
     }
@@ -301,6 +398,7 @@ fn restore_while_moving(hwnd: HWND, rect: &mut RECT) {
                 let shift = left - rect.left;
                 drag.shift.set(Some(shift));
                 drag.restore_size.set(None);
+                drag.tiled.set(None);
                 shift
             }
         };
@@ -311,9 +409,175 @@ fn restore_while_moving(hwnd: HWND, rect: &mut RECT) {
     });
 }
 
+#[derive(Clone, Copy, PartialEq)]
 enum Side {
     Left,
     Right,
+}
+
+fn set_keyboard_hook(on: bool) {
+    DRAG.with(|drag| {
+        let hook = drag.hook.get();
+        // SAFETY: installing or removing our own hook on this GUI thread,
+        // whose message loop then runs it.
+        unsafe {
+            if on && hook.is_null() {
+                drag.hook.set(SetWindowsHookExW(
+                    WH_KEYBOARD_LL,
+                    Some(keyboard_hook),
+                    std::ptr::null_mut(),
+                    0,
+                ));
+            } else if !on && !hook.is_null() {
+                UnhookWindowsHookEx(hook);
+                drag.hook.set(std::ptr::null_mut());
+            }
+        }
+    });
+}
+
+/// Takes Win+arrow (without other modifiers) and posts it to the window.
+unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: Windows passes a KBDLLHOOKSTRUCT with keyboard hook calls.
+    unsafe {
+        if code >= 0 && (wparam == WM_KEYDOWN as WPARAM || wparam == WM_SYSKEYDOWN as WPARAM) {
+            let key = &*(lparam as *const KBDLLHOOKSTRUCT);
+            let held = |vk: u16| GetAsyncKeyState(i32::from(vk)) < 0;
+            let arrow = key.vkCode as u16;
+            if [VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT].contains(&arrow)
+                && (held(VK_LWIN) || held(VK_RWIN))
+                && ![VK_SHIFT, VK_CONTROL, VK_MENU].into_iter().any(held)
+            {
+                keybd_event(VK_MASK, 0, 0, 0);
+                keybd_event(VK_MASK, 0, KEYEVENTF_KEYUP, 0);
+                PostMessageW(
+                    DRAG.with(|drag| drag.hwnd.get()),
+                    WM_WIN_ARROW,
+                    arrow as WPARAM,
+                    0,
+                );
+                return 1;
+            }
+        }
+        CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+    }
+}
+
+/// What Windows does for Win+arrow on a framed window, on one monitor.
+fn win_arrow(hwnd: HWND, arrow: u16) {
+    let tiled = DRAG.with(|drag| drag.tiled.get());
+    with_window(|window| {
+        let side = match arrow {
+            VK_UP => {
+                window.maximize();
+                return;
+            }
+            VK_DOWN => {
+                if window.is_maximized() {
+                    window.unmaximize();
+                } else if tiled.is_some() {
+                    untile(hwnd);
+                } else {
+                    window.minimize();
+                }
+                return;
+            }
+            VK_LEFT => Side::Left,
+            _ => Side::Right,
+        };
+        if window.is_maximized() {
+            // Tile once GTK has laid out the restored window.
+            window.unmaximize();
+            gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(100), move || {
+                tile_on_monitor(hwnd, side)
+            });
+        } else if tiled.is_some_and(|tiled| tiled != side) {
+            untile(hwnd);
+        } else if tiled.is_none() {
+            tile_on_monitor(hwnd, side);
+        }
+    });
+}
+
+fn tile_on_monitor(hwnd: HWND, side: Side) {
+    if let Some((_, work)) = frame_and_work_area(hwnd) {
+        tile(hwnd, work, side);
+    }
+}
+
+/// GTK opens windows at the top-left corner at their default size, even
+/// where that runs off a small screen: center and fit the first one.
+fn place_on_screen(hwnd: HWND) {
+    let Some((frame, work)) = frame_and_work_area(hwnd) else {
+        return;
+    };
+    let margin = margin(hwnd);
+    let width = (frame.right - frame.left).min(work.right - work.left + 2 * margin);
+    let height = (frame.bottom - frame.top).min(work.bottom - work.top + 2 * margin);
+    // SAFETY: moving and resizing our own window.
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            (work.left + work.right - width) / 2,
+            (work.top + work.bottom - height) / 2,
+            width,
+            height,
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
+/// The window's rectangle and the work area of the monitor it is mostly on.
+fn frame_and_work_area(hwnd: HWND) -> Option<(RECT, RECT)> {
+    let mut info = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..unsafe { std::mem::zeroed() }
+    };
+    let mut frame = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    // SAFETY: out-parameters of the stated size.
+    unsafe {
+        GetWindowRect(hwnd, &mut frame);
+        let center = POINT {
+            x: (frame.left + frame.right) / 2,
+            y: (frame.top + frame.bottom) / 2,
+        };
+        if GetMonitorInfoW(
+            MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST),
+            &mut info,
+        ) == 0
+        {
+            return None;
+        }
+    }
+    Some((frame, info.rcWork))
+}
+
+/// Back to the size and place the window had before it was tiled.
+fn untile(hwnd: HWND) {
+    let (size, origin) = DRAG.with(|drag| {
+        drag.tiled.set(None);
+        (drag.restore_size.take(), drag.restore_origin.take())
+    });
+    if let (Some((width, height)), Some((x, y))) = (size, origin) {
+        // SAFETY: moving and resizing our own window.
+        unsafe {
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                x,
+                y,
+                width,
+                height,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
 }
 
 /// After a move: cursor at the top edge maximizes, at a side edge tiles.
@@ -368,7 +632,9 @@ fn tile(hwnd: HWND, work: RECT, side: Side) {
         DRAG.with(|drag| {
             if drag.restore_size.get().is_none() {
                 drag.restore_size.set(Some((frame_width, frame_height)));
+                drag.restore_origin.set(Some((frame.left, frame.top)));
             }
+            drag.tiled.set(Some(side));
         });
         let half = (work.right - work.left) / 2;
         let x = match side {
