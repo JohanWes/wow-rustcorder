@@ -93,7 +93,14 @@ fn install(parent: &gtk4::Widget, latest: Latest) {
 /// `None` until the first Windows release publishes its manifest (404).
 fn fetch_latest() -> Result<Option<Latest>, String> {
     let output = process::command("curl.exe")
-        .args(["-sSL", "--max-time", "20", "-w", "\n%{http_code}", MANIFEST_URL])
+        .args([
+            "-sSL",
+            "--max-time",
+            "20",
+            "-w",
+            "\n%{http_code}",
+            MANIFEST_URL,
+        ])
         .output()
         .map_err(|error| format!("curl.exe: {error}"))?;
     if !output.status.success() {

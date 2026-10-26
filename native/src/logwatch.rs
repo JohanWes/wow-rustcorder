@@ -63,21 +63,40 @@ pub struct LogTailer {
 
 impl LogTailer {
     /// Open a configured Logs directory (or a concrete log file) for live use.
-    /// Existing bytes are deliberately ignored.
+    /// Existing bytes are deliberately ignored. A Logs directory without a
+    /// combat log yet is watched until WoW creates one, read from its start.
     pub fn open(
         source: PathBuf,
         flavor: GameFlavor,
         time_context: ParseTimeContext,
     ) -> Result<Self, LogError> {
-        let path = active_path(&source)?;
-        let metadata = metadata(&path)?;
-        let identity = file_identity(&metadata);
-        let offset = metadata.len();
-        let checkpoint = read_checkpoint(&path, offset)?;
+        let (path, metadata) = match active_path(&source) {
+            Ok(path) => {
+                let metadata = metadata(&path)?;
+                (path, Some(metadata))
+            }
+            Err(LogError::NoActiveLog(_)) => (PathBuf::new(), None),
+            Err(error) => return Err(error),
+        };
+        let identity = metadata.as_ref().map_or(
+            FileIdentity {
+                device: 0,
+                inode: 0,
+            },
+            file_identity,
+        );
+        let offset = metadata.as_ref().map_or(0, Metadata::len);
+        let (checkpoint, seeded_context) = if metadata.is_some() {
+            (
+                read_checkpoint(&path, offset)?,
+                probe_header_context(&path, time_context)?,
+            )
+        } else {
+            (Vec::new(), time_context)
+        };
         let source_modified = (!source.is_file())
             .then(|| fs::metadata(&source).ok()?.modified().ok())
             .flatten();
-        let seeded_context = probe_header_context(&path, time_context)?;
         Ok(Self {
             source,
             path,
@@ -90,8 +109,8 @@ impl LogTailer {
             base_context: time_context,
             time_context: seeded_context,
             checkpoint,
-            observed_len: metadata.len(),
-            observed_modified: metadata.modified().ok(),
+            observed_len: offset,
+            observed_modified: metadata.and_then(|metadata| metadata.modified().ok()),
             source_modified,
             next_active_refresh: Instant::now() + ACTIVE_FILE_REFRESH_INTERVAL,
             last_error: None,
@@ -118,6 +137,9 @@ impl LogTailer {
 
     fn read_appended(&mut self) -> Result<Vec<ParsedEvent>, LogError> {
         self.refresh_active_file()?;
+        if self.waiting() {
+            return Ok(Vec::new());
+        }
         let current_metadata = metadata(&self.path)?;
         let current_identity = file_identity(&current_metadata);
         let current_modified = current_metadata.modified().ok();
@@ -169,9 +191,12 @@ impl LogTailer {
         if source_modified == self.source_modified && now < self.next_active_refresh {
             return Ok(());
         }
-        let active = active_path(&self.source)?;
         self.source_modified = source_modified;
         self.next_active_refresh = now + ACTIVE_FILE_REFRESH_INTERVAL;
+        let active = match active_path(&self.source) {
+            Err(LogError::NoActiveLog(_)) if self.waiting() => return Ok(()),
+            active => active?,
+        };
         if active == self.path {
             return Ok(());
         }
@@ -179,6 +204,11 @@ impl LogTailer {
         self.path = active;
         self.reset_for_file(file_identity(&metadata));
         Ok(())
+    }
+
+    /// Watching a Logs directory that has no combat log yet.
+    fn waiting(&self) -> bool {
+        self.path.as_os_str().is_empty()
     }
 
     fn reset_for_file(&mut self, identity: FileIdentity) {
@@ -472,6 +502,16 @@ mod tests {
         assert!(live.poll().unwrap().is_empty());
         let mut crlf = tailer_with(&path, EVENT.replace('\n', "\r\n").as_bytes());
         assert_eq!(crlf.poll().unwrap().len(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn empty_logs_directory_waits_for_the_first_log() {
+        let directory = test_directory();
+        let mut tailer = LogTailer::open(directory.clone(), GameFlavor::Retail, CONTEXT).unwrap();
+        assert!(tailer.poll().unwrap().is_empty());
+        fs::write(directory.join("WoWCombatLog-1.txt"), EVENT).unwrap();
+        assert_eq!(tailer.poll().unwrap().len(), 1);
         fs::remove_dir_all(directory).unwrap();
     }
 
