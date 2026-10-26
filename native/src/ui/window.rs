@@ -200,6 +200,11 @@ impl Shell {
             .width_request(640)
             .height_request(480)
             .build();
+        #[cfg(windows)]
+        {
+            super::windows_native::setup(&window);
+            super::windows_diag::attach(&window);
+        }
 
         // Mirror the system theme onto the window so project CSS can darken
         // the class/outcome colors for light-theme contrast (WCAG AA).

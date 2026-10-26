@@ -52,6 +52,12 @@ impl PlayerBackend {
         cap_demux_queues();
         let video = clapper_gtk::Video::new();
         let player = video.player().ok_or("ClapperGtk did not create a player")?;
+        player.connect_current_video_decoder_notify(|player| {
+            log_element("video decoder", player.current_video_decoder());
+        });
+        player.connect_current_audio_decoder_notify(|player| {
+            log_element("audio decoder", player.current_audio_decoder());
+        });
         Ok(Self { video, player })
     }
 
@@ -221,5 +227,13 @@ fn cap_if_multiqueue(element: &gst::Element) {
         .is_some_and(|factory| factory.name() == "multiqueue")
     {
         element.set_property("max-size-bytes", DEMUX_QUEUE_BYTES);
+    }
+}
+
+/// Which decoder playback picked: hardware (d3d11*, va*, nv*) or software.
+fn log_element(role: &str, element: Option<gstreamer::Element>) {
+    use gstreamer::prelude::*;
+    if let Some(factory) = element.and_then(|element| element.factory()) {
+        tracing::info!(element = factory.name().as_str(), "{role}");
     }
 }

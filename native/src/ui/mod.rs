@@ -23,9 +23,13 @@ pub mod timeline;
 #[cfg(unix)]
 pub mod tray_backend;
 #[cfg(windows)]
-#[path = "tray_none.rs"]
+#[path = "tray_windows.rs"]
 pub mod tray_backend;
 pub mod window;
+#[cfg(windows)]
+mod windows_diag;
+#[cfg(windows)]
+mod windows_native;
 #[cfg(windows)]
 pub mod windows_update;
 
