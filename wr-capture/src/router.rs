@@ -41,6 +41,9 @@ impl Writer {
     }
 }
 
+/// Twice the GOP length the encoder is asked for.
+const MAX_GOP: i64 = 4 * 10_000_000;
+
 pub struct Router {
     codec: VideoCodec,
     size: (u32, u32),
@@ -225,6 +228,11 @@ impl Router {
         let newest = packet.pts;
         if packet.is_keyframe() {
             self.keys.push_back(packet.pts);
+        }
+        // Trimming needs keyframes; ask for one if the encoder ignored the
+        // 2 s GOP setting, or the ring would grow without bound.
+        if packet.video && self.keys.back().is_none_or(|key| newest - key > MAX_GOP) {
+            self.want_keyframe = true;
         }
         self.ring.push_back(packet);
         while self.keys.len() >= 2 && self.keys[1] <= newest - self.keep {

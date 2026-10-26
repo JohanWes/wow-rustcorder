@@ -20,7 +20,7 @@ use windows::Win32::Media::Audio::*;
 use windows::Win32::Media::Multimedia::WAVE_FORMAT_IEEE_FLOAT;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{
-    BLOB, CLSCTX_ALL, CoCreateInstance, IAgileObject, IAgileObject_Impl,
+    BLOB, CLSCTX_ALL, CoCreateInstance, CoTaskMemFree, IAgileObject, IAgileObject_Impl,
 };
 use windows::Win32::System::Threading::CreateEventW;
 use windows::Win32::System::Variant::VT_BLOB;
@@ -35,6 +35,10 @@ const RATE: i64 = AUDIO_RATE as i64;
 const LATENCY: i64 = RATE / 20;
 /// Timestamp jitter treated as contiguous rather than a gap.
 const JITTER: i64 = RATE / 100;
+/// How far a source may run ahead of the shared clock before it is pulled
+/// back: device clocks drift from QPC by tens of ppm, which adds up over a
+/// raid night.
+const AHEAD: i64 = RATE / 20;
 const RETRY: Duration = Duration::from_secs(2);
 
 pub fn run(options: &Options, shared: &Shared, sender: Sender<Message>) -> Result<(), String> {
@@ -172,6 +176,18 @@ impl Track {
         let Some(mut client) = self.client.take() else {
             return;
         };
+        // A loopback or mic stream keeps running on the old device when the
+        // user switches the default one (e.g. plugs in a headset).
+        if let Some(flow) = client.default_flow
+            && Instant::now() >= self.retry_at
+        {
+            self.retry_at = Instant::now() + RETRY;
+            if default_device_id(flow).is_some_and(|id| id != client.device_id) {
+                eprintln!("audio {:?}: the default device changed", self.source);
+                self.retry_at = Instant::now();
+                return;
+            }
+        }
         match client.read(|frames, at| self.push(frames, at)) {
             Ok(()) => self.client = Some(client),
             // A changed default device or an exited process ends up here.
@@ -194,6 +210,9 @@ impl Track {
         } else if at > end + JITTER {
             let gap = (at - end).min(RATE) as usize;
             self.samples.extend(std::iter::repeat_n([0.0; 2], gap));
+        } else if at < end - AHEAD {
+            let back = ((end - at) as usize).min(self.samples.len());
+            self.samples.truncate(self.samples.len() - back);
         }
         self.samples
             .extend(frames.chunks_exact(2).map(|pair| [pair[0], pair[1]]));
@@ -225,6 +244,9 @@ struct Client {
     _audio: IAudioClient,
     event: Option<HANDLE>,
     origin: i64,
+    /// For the default device: its flow and the endpoint it opened.
+    default_flow: Option<EDataFlow>,
+    device_id: String,
 }
 
 impl Drop for Client {
@@ -248,7 +270,7 @@ impl Client {
                 .Activate(CLSCTX_ALL, None)
                 .map_err(fail("open the device"))?
         };
-        Self::start(
+        let mut client = Self::start(
             audio,
             if loopback {
                 AUDCLNT_STREAMFLAGS_LOOPBACK
@@ -257,7 +279,10 @@ impl Client {
             },
             None,
             origin,
-        )
+        )?;
+        client.default_flow = Some(flow);
+        client.device_id = default_device_id(flow).unwrap_or_default();
+        Ok(client)
     }
 
     /// Loopback of one process tree (Windows 10 2004 and later).
@@ -334,7 +359,16 @@ impl Client {
             flags | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
         let capture = unsafe {
             audio
-                .Initialize(AUDCLNT_SHAREMODE_SHARED, flags, 2_000_000, 0, &format, None)
+                // 1 s of slack: opening app audio can block this thread for
+                // seconds while the other sources keep filling their buffers.
+                .Initialize(
+                    AUDCLNT_SHAREMODE_SHARED,
+                    flags,
+                    10_000_000,
+                    0,
+                    &format,
+                    None,
+                )
                 .map_err(fail("initialize audio"))?;
             if let Some(event) = event {
                 audio
@@ -351,6 +385,8 @@ impl Client {
             _audio: audio,
             event,
             origin,
+            default_flow: None,
+            device_id: String::new(),
         })
     }
 
@@ -390,6 +426,22 @@ impl Client {
             }
             unsafe { self.capture.ReleaseBuffer(frames) }.map_err(fail("read audio"))?;
         }
+    }
+}
+
+/// The endpoint id of the current default device for `flow`.
+fn default_device_id(flow: EDataFlow) -> Option<String> {
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let id = enumerator
+            .GetDefaultAudioEndpoint(flow, eConsole)
+            .ok()?
+            .GetId()
+            .ok()?;
+        let text = id.to_string().ok();
+        CoTaskMemFree(Some(id.0 as *const _));
+        text
     }
 }
 

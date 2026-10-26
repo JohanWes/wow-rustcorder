@@ -29,7 +29,11 @@ pub struct TsWriter<W: Write> {
 
 impl TsWriter<BufWriter<File>> {
     pub fn create(path: &Path, codec: VideoCodec, audio: bool) -> io::Result<Self> {
-        Ok(Self::new(BufWriter::new(File::create(path)?), codec, audio))
+        Ok(Self::new(
+            BufWriter::with_capacity(1 << 20, File::create(path)?),
+            codec,
+            audio,
+        ))
     }
 }
 

@@ -28,7 +28,11 @@ pub struct MkvWriter<W: Write> {
 
 impl MkvWriter<BufWriter<File>> {
     pub fn create(path: &Path, size: (u32, u32), audio: bool) -> io::Result<Self> {
-        Ok(Self::new(BufWriter::new(File::create(path)?), size, audio))
+        Ok(Self::new(
+            BufWriter::with_capacity(1 << 20, File::create(path)?),
+            size,
+            audio,
+        ))
     }
 }
 

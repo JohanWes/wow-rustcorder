@@ -41,7 +41,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{BOOL, Interface, PWSTR};
 
-use super::convert::Converter;
+use super::convert::{Converter, Frame};
 use super::encoder::Encoder;
 use super::{Message, Shared, fail, now_100ns};
 use crate::{Options, Target};
@@ -89,6 +89,7 @@ pub fn run(
     let start = now_100ns();
     let mut index: i64 = 0;
     let mut packets = Vec::new();
+    let mut last: Option<(bool, ID3D11Texture2D)> = None;
     loop {
         let mut due = start + index * 10_000_000 / fps;
         let now = now_100ns();
@@ -103,7 +104,18 @@ pub fn run(
         }
         let work = Instant::now();
         let fresh = capture.poll(&context, shared);
-        let frame = converter.convert(capture.latest.as_ref())?;
+        // Without a new frame the last converted one is still right, unless
+        // the target came or went (game frame vs black).
+        let target = capture.latest.is_some();
+        let frame = match &last {
+            Some((had_target, texture)) if !fresh && *had_target == target => {
+                Frame::Texture(texture.clone())
+            }
+            _ => converter.convert(capture.latest.as_ref())?,
+        };
+        if let Frame::Texture(texture) = &frame {
+            last = Some((target, texture.clone()));
+        }
         let keyframe = shared.keyframe.swap(false, Ordering::Relaxed);
         encoder.encode_video(&frame, due, 10_000_000 / fps, keyframe, &mut packets)?;
         shared.frames.encoded(fresh, work.elapsed());
@@ -228,6 +240,9 @@ struct Capture {
     winrt_device: IDirect3DDevice,
     target: Target,
     cursor: bool,
+    /// Shortest gap between captured frames, in 100 ns: about one recorded
+    /// frame, so a 174 fps game is not copied 174 times a second.
+    min_interval: i64,
     active: Option<Active>,
     next_search: Instant,
     /// Copy of the newest frame with its content size.
@@ -248,6 +263,7 @@ impl Capture {
             winrt_device,
             target: options.target.clone(),
             cursor: options.cursor,
+            min_interval: (10_000_000 / i64::from(options.fps) - 10_000).max(10_000),
             active: None,
             next_search: Instant::now(),
             latest: None,
@@ -331,7 +347,9 @@ impl Capture {
         // Each is missing on older Windows builds; capture works without them.
         let _ = session.SetIsBorderRequired(false);
         let _ = session.SetIsCursorCaptureEnabled(self.cursor);
-        let _ = session.SetMinUpdateInterval(windows::Foundation::TimeSpan { Duration: 10_000 });
+        let _ = session.SetMinUpdateInterval(windows::Foundation::TimeSpan {
+            Duration: self.min_interval,
+        });
         session.StartCapture().map_err(fail("start capturing"))?;
         Ok(Some(Active {
             window,

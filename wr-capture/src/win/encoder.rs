@@ -416,6 +416,11 @@ impl Encoder {
             self.need_input += 1;
         } else if kind == METransformHaveOutput.0 as u32 {
             self.output(out)?;
+        } else if kind == MEError.0 as u32 {
+            // E.g. a GPU driver reset: no more NeedInput would come, so
+            // fail and let the app restart the recorder.
+            let status = unsafe { event.GetStatus() }.unwrap_or_default();
+            return Err(format!("the encoder failed: {status}"));
         }
         Ok(())
     }
