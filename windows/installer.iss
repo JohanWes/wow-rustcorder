@@ -28,7 +28,7 @@ OutputBaseFilename=WarcraftRecorder-{#AppVersion}-setup
 SetupIconFile=warcraft-recorder.ico
 UninstallDisplayIcon={app}\bin\warcraft-recorder.exe
 UninstallDisplayName=Warcraft Recorder
-Compression=lzma2/max
+Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ; An update closes the running app (and its recorder) first.
