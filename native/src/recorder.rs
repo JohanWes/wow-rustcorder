@@ -31,7 +31,6 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::config::CaptureSettings;
-#[cfg(unix)]
 use crate::domain::{Category, Codec, RecordingId};
 use crate::process;
 use crate::storage::now_unix_ms;
