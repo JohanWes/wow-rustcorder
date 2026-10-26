@@ -1013,6 +1013,18 @@ impl Settings {
     /// recorder warning, storage usage, advanced-logging warnings, and the
     /// Apply confirmation.
     pub fn apply_snapshot(&self, snapshot: &AppSnapshot) {
+        // Settings never owns the release-notes acknowledgement and the
+        // coordinator overwrites it on save; follow its value, or a save made
+        // from a dialog opened via "What's new" never matches and Apply sticks.
+        let seen = &snapshot.config.last_seen_version;
+        self.draft.borrow_mut().last_seen_version.clone_from(seen);
+        self.baseline
+            .borrow_mut()
+            .last_seen_version
+            .clone_from(seen);
+        if let Some((sent, _)) = self.pending.borrow_mut().as_mut() {
+            sent.last_seen_version.clone_from(seen);
+        }
         let reason = unsafe_reason(snapshot);
         let pending = self.pending.borrow().clone();
         self.apply
@@ -1093,13 +1105,24 @@ impl Settings {
                 );
             }
         }
-        if self.pending.borrow().is_some() {
-            // Coordinator rejected the save without changing its config.
+        let pending = self.pending.borrow().clone();
+        if let Some((_, sent_at_ms)) = pending {
+            // Coordinator rejected the save without changing its config:
+            // invalid, busy capturing or saving, or the file write failed.
             if !snapshot.setup_problems.is_empty() {
                 *self.pending.borrow_mut() = None;
                 self.show_problems(&snapshot.setup_problems);
+            } else if let Some(problem) = snapshot
+                .problems
+                .iter()
+                .rev()
+                .find(|problem| problem.occurred_unix_ms >= sent_at_ms)
+            {
+                *self.pending.borrow_mut() = None;
+                self.set_feedback(&format!("Not saved: {}", problem.summary), "warning");
+                self.apply.set_sensitive(reason.is_none());
             }
-        } else if unsafe_reason(snapshot).is_none() {
+        } else if reason.is_none() {
             self.apply.set_sensitive(true);
         }
     }
