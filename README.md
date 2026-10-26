@@ -59,6 +59,15 @@ Requirements:
 `gpu-screen-recorder`, the Clapper video player and FFmpeg are bundled in the
 Flatpak.
 
+### Windows
+
+Download `WarcraftRecorder-<version>-setup.exe` from the
+[latest release](https://github.com/JohanWes/wow-recorder-linuxwayland/releases/latest)
+and run it. It installs for your user only, without admin rights, and needs
+Windows 10 (version 2004) or later. The installer is not code-signed, so
+SmartScreen may ask you to choose **More info** and then **Run anyway**. The app
+checks for updates itself. Uninstall it from **Settings > Apps**.
+
 ## Setup
 
 1. Open Settings and choose a **recording folder** and your World of Warcraft
