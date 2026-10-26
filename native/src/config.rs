@@ -247,7 +247,8 @@ impl Default for InterfaceSettings {
             encounter_markers: MarkerVisibility::Visible,
             round_markers: MarkerVisibility::Visible,
             selected_category: Category::ThreeVThree,
-            minimize_to_tray: true,
+            // Windows minimizes to the taskbar, so Win+D can restore it.
+            minimize_to_tray: !cfg!(windows),
             close_to_tray: true,
             start_minimized: false,
             layout: LayoutSettings::default(),
