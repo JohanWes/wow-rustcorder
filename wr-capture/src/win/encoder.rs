@@ -109,7 +109,14 @@ impl Encoder {
                 Err(message) => eprintln!("encoder {name} unusable: {message}"),
             }
         }
-        Err(format!("no usable {codec:?} encoder"))
+        let name = match codec {
+            VideoCodec::H264 => "H.264",
+            VideoCodec::Hevc => "HEVC",
+            VideoCodec::Av1 => "AV1",
+        };
+        Err(format!(
+            "This GPU cannot encode {name}. Choose another video codec in Settings."
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
