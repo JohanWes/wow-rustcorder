@@ -29,6 +29,8 @@ pub mod window;
 #[cfg(windows)]
 mod windows_diag;
 #[cfg(windows)]
+pub use windows_diag::forward_glib_warnings;
+#[cfg(windows)]
 mod windows_native;
 #[cfg(windows)]
 pub mod windows_update;

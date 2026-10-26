@@ -29,7 +29,10 @@ const APP_ID: &str = "io.github.JohanWes.WarcraftRecorder.Devel";
 
 fn main() {
     #[cfg(windows)]
-    isolate_gstreamer();
+    {
+        enable_gpu_rendering();
+        isolate_gstreamer();
+    }
     let setup = match coordinator::Setup::from_environment() {
         Ok(setup) => setup,
         Err(error) => {
@@ -56,6 +59,9 @@ fn main() {
     };
 
     init_logging(&setup.data_dir);
+    log_panics();
+    #[cfg(windows)]
+    ui::forward_glib_warnings();
     // Loaded once: the shell reads its startup flags, the coordinator the rest.
     let config = Config::load(&setup.config_path);
     let options = shell_options(&setup, config.as_ref().ok());
@@ -115,6 +121,32 @@ fn config_dir(config_path: &std::path::Path) -> PathBuf {
     config_path
         .parent()
         .map_or_else(PathBuf::new, std::path::Path::to_owned)
+}
+
+/// GTK 4.24 renders with OpenGL or Vulkan on Windows only through
+/// DirectComposition, which it leaves off by default; without it every frame
+/// is drawn by the CPU. Runs before any other thread exists.
+#[cfg(windows)]
+fn enable_gpu_rendering() {
+    let mut flags = std::env::var("GDK_DEBUG").unwrap_or_default();
+    if !flags.split(',').any(|flag| flag == "dcomp") {
+        if !flags.is_empty() {
+            flags.push(',');
+        }
+        flags.push_str("dcomp");
+    }
+    // SAFETY: single-threaded here; nothing else reads the environment yet.
+    unsafe { std::env::set_var("GDK_DEBUG", flags) };
+}
+
+/// A panic is logged before the default hook prints it: the Windows build
+/// has no console, so stderr goes nowhere.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(%info, "panic");
+        default(info);
+    }));
 }
 
 /// The installed app (`bin/` beside `lib/gstreamer-1.0/`) loads only its own

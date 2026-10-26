@@ -883,8 +883,8 @@ impl Settings {
         action_bar.set_halign(gtk4::Align::Center);
         action_bar.set_margin_top(8);
         action_bar.set_margin_bottom(8);
-        action_bar.append(&cancel);
         action_bar.append(&apply);
+        action_bar.append(&cancel);
 
         let feedback = gtk4::Label::new(None);
         feedback.set_wrap(true);

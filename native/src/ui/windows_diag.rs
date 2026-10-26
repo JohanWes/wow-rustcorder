@@ -23,13 +23,43 @@ const SLOW_FRAME_US: i64 = 25_000;
 const USAGE_INTERVAL: Duration = Duration::from_secs(60);
 
 pub fn attach(window: &adw::ApplicationWindow) {
-    window.connect_map(|window| {
-        log_setup(window);
+    // Realize happens once per window surface, map on every show from the
+    // tray: hook the frame clock on the first, describe the setup only once.
+    window.connect_realize(|window| {
         if let Some(clock) = window.frame_clock() {
             watch_frames(&clock);
         }
     });
+    let described = Cell::new(false);
+    window.connect_map(move |window| {
+        if !described.replace(true) {
+            log_setup(window);
+        }
+    });
     log_usage_periodically();
+}
+
+/// GTK, GLib and Clapper warnings go to app.log: the Windows build has no
+/// console for them.
+pub fn forward_glib_warnings() {
+    gtk4::glib::log_set_writer_func(|level, fields| {
+        use gtk4::glib::LogLevel;
+        let field = |key: &str| {
+            fields
+                .iter()
+                .find(|field| field.key() == key)
+                .and_then(|field| field.value_str())
+                .unwrap_or_default()
+        };
+        let (domain, message) = (field("GLIB_DOMAIN"), field("MESSAGE"));
+        match level {
+            LogLevel::Error | LogLevel::Critical => tracing::error!(domain, "{message}"),
+            LogLevel::Warning => tracing::warn!(domain, "{message}"),
+            LogLevel::Message => tracing::info!(domain, "{message}"),
+            LogLevel::Info | LogLevel::Debug => {}
+        }
+        gtk4::glib::LogWriterOutput::Handled
+    });
 }
 
 fn log_setup(window: &adw::ApplicationWindow) {
@@ -49,6 +79,7 @@ fn log_setup(window: &adw::ApplicationWindow) {
         font = settings.as_ref().and_then(|s| s.gtk_font_name()).unwrap_or_default().as_str(),
         xft_dpi = settings.as_ref().map_or(0, |s| s.gtk_xft_dpi()) / 1024,
         window_scale = window.scale_factor(),
+        shadow_margin = window.surface_transform().0,
         animations = settings.as_ref().is_some_and(|s| s.is_gtk_enable_animations()),
         "windows display setup"
     );

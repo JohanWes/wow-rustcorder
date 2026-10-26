@@ -12,6 +12,12 @@
 //!
 //! GTK also takes Windows' 9 pt message font, which reads small next to the
 //! 11 pt the layout was designed with, so the font is raised to that.
+//!
+//! With DirectComposition on (see `enable_gpu_rendering` in main.rs), GTK's
+//! GL renderer draws transparent pixels black. So the window is clipped to its
+//! visible part with a window region, which cuts off GTK's invisible resize
+//! margin: resizing grabs the visible edge instead. Shadows and rounded
+//! corners, which would show as black, are styled away.
 
 use std::cell::{Cell, RefCell};
 
@@ -20,16 +26,28 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    CreateRectRgn, GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    SetWindowRgn,
 };
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetWindowRect, HTCAPTION, HTCLIENT, IsZoomed, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOZORDER, SetWindowPos, WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_MOVING, WM_NCHITTEST,
-    WM_NCLBUTTONDBLCLK,
+    GetCursorPos, GetWindowRect, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION, HTCLIENT,
+    HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, IsIconic, IsZoomed, SW_RESTORE, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOZORDER, SetWindowPos, ShowWindow, WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE,
+    WM_MOVING, WM_NCHITTEST, WM_NCLBUTTONDBLCLK, WM_WINDOWPOSCHANGED,
 };
 
 const MIN_FONT_POINTS: i32 = 11;
+/// GTK's resize margin around a window without a shadow (RESIZE_HANDLE_SIZE).
+const MARGIN: i32 = 12;
+/// How far into the visible edge a resize grab reaches.
+const GRIP: i32 = 4;
+
+const CSS: &str = "
+window.csd { box-shadow: none; border-radius: 0; }
+popover > contents, popover > arrow { box-shadow: none; }
+tooltip { box-shadow: none; }
+";
 
 unsafe extern "C" {
     fn gdk_win32_surface_get_handle(surface: *mut gtk4::gdk::ffi::GdkSurface) -> HWND;
@@ -44,6 +62,8 @@ struct Drag {
     /// Horizontal shift keeping the cursor over the same spot of a window
     /// that shrank back to its restore size at the start of this drag.
     shift: Cell<Option<i32>>,
+    /// Size and margin of the window region last set.
+    region: Cell<(i32, i32, i32)>,
 }
 
 thread_local! {
@@ -52,6 +72,13 @@ thread_local! {
 
 pub fn setup(window: &adw::ApplicationWindow) {
     raise_font_size();
+    let provider = gtk4::CssProvider::new();
+    provider.load_from_data(CSS);
+    gtk4::style_context_add_provider_for_display(
+        &WidgetExt::display(window),
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+    );
     window.connect_realize(|window| {
         let Some(surface) = window.surface() else {
             return;
@@ -62,14 +89,103 @@ pub fn setup(window: &adw::ApplicationWindow) {
         // SAFETY: the realized toplevel's HWND, subclassed on the GTK thread
         // that owns it.
         unsafe {
-            SetWindowSubclass(
-                gdk_win32_surface_get_handle(surface.as_ptr()),
-                Some(subclass_proc),
-                1,
-                0,
-            );
+            let hwnd = gdk_win32_surface_get_handle(surface.as_ptr());
+            SetWindowSubclass(hwnd, Some(subclass_proc), 1, 0);
+            clip_to_content(hwnd);
         }
     });
+}
+
+/// Un-minimize a window hidden to the tray while minimized. GTK would show it
+/// minimized again, and minimize-to-tray would then hide it straight away.
+pub fn restore_minimized(window: &impl IsA<gtk4::Window>) {
+    let Some(surface) = window.as_ref().surface() else {
+        return;
+    };
+    // SAFETY: our own toplevel's HWND.
+    unsafe {
+        let hwnd = gdk_win32_surface_get_handle(surface.as_ptr());
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+    }
+}
+
+/// GTK's margin in physical pixels; none when maximized or fullscreen.
+fn margin(hwnd: HWND) -> i32 {
+    let mut margin = 0;
+    with_window(|window| {
+        let state = window
+            .surface()
+            .and_downcast::<gtk4::gdk::Toplevel>()
+            .map_or(gtk4::gdk::ToplevelState::empty(), |toplevel| {
+                toplevel.state()
+            });
+        let filled = gtk4::gdk::ToplevelState::MAXIMIZED | gtk4::gdk::ToplevelState::FULLSCREEN;
+        // SAFETY: our own HWND.
+        if !state.intersects(filled) && unsafe { IsZoomed(hwnd) } == 0 {
+            margin = MARGIN * window.scale_factor();
+        }
+    });
+    margin
+}
+
+/// # Safety
+/// `hwnd` is the main window's.
+unsafe fn clip_to_content(hwnd: HWND) {
+    let margin = margin(hwnd);
+    let mut frame = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    // SAFETY: per the contract; Windows owns the region once set.
+    unsafe {
+        GetWindowRect(hwnd, &mut frame);
+        let (width, height) = (frame.right - frame.left, frame.bottom - frame.top);
+        // Setting a region sends WM_WINDOWPOSCHANGED again, and GTK answers
+        // with a new layout: only set it when it changes, never minimized.
+        let changed = DRAG.with(|drag| drag.region.replace((width, height, margin)))
+            != (width, height, margin);
+        if !changed || IsIconic(hwnd) != 0 {
+            return;
+        }
+        let region = CreateRectRgn(margin, margin, width - margin, height - margin);
+        SetWindowRgn(hwnd, region, 1);
+    }
+}
+
+/// Resize grips just inside the visible edges.
+fn edge_hit(hwnd: HWND, point: POINT) -> Option<u32> {
+    let margin = margin(hwnd);
+    if margin == 0 {
+        return None;
+    }
+    let mut frame = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    // SAFETY: an out-parameter.
+    unsafe { GetWindowRect(hwnd, &mut frame) };
+    let grip = margin / MARGIN * GRIP + margin;
+    let left = point.x < frame.left + grip;
+    let right = point.x >= frame.right - grip;
+    let top = point.y < frame.top + grip;
+    let bottom = point.y >= frame.bottom - grip;
+    Some(match (left, right, top, bottom) {
+        (true, _, true, _) => HTTOPLEFT,
+        (_, true, true, _) => HTTOPRIGHT,
+        (true, _, _, true) => HTBOTTOMLEFT,
+        (_, true, _, true) => HTBOTTOMRIGHT,
+        (true, ..) => HTLEFT,
+        (_, true, ..) => HTRIGHT,
+        (_, _, true, _) => HTTOP,
+        (.., true) => HTBOTTOM,
+        _ => return None,
+    })
 }
 
 fn raise_font_size() {
@@ -101,14 +217,25 @@ unsafe extern "system" fn subclass_proc(
             // A maximized window stays HTCLIENT: GTK's own drag restores it.
             WM_NCHITTEST => {
                 let hit = DefSubclassProc(hwnd, message, wparam, lparam);
+                if hit != HTCLIENT as LRESULT {
+                    return hit;
+                }
                 let point = POINT {
                     x: (lparam & 0xFFFF) as i16 as i32,
                     y: ((lparam >> 16) & 0xFFFF) as i16 as i32,
                 };
-                if hit == HTCLIENT as LRESULT && IsZoomed(hwnd) == 0 && is_caption(hwnd, point) {
+                if let Some(edge) = edge_hit(hwnd, point) {
+                    return edge as LRESULT;
+                }
+                if IsZoomed(hwnd) == 0 && is_caption(hwnd, point) {
                     return HTCAPTION as LRESULT;
                 }
                 hit
+            }
+            WM_WINDOWPOSCHANGED => {
+                let result = DefSubclassProc(hwnd, message, wparam, lparam);
+                clip_to_content(hwnd);
+                result
             }
             WM_NCLBUTTONDBLCLK if wparam == HTCAPTION as WPARAM => {
                 with_window(|window| {

@@ -470,6 +470,8 @@ impl Shell {
 
     pub fn present(&self) {
         self.hold_guard.borrow_mut().take();
+        #[cfg(windows)]
+        super::windows_native::restore_minimized(&self.window);
         // A window hidden while minimized keeps MINIMIZED on its toplevel, so
         // `present` alone re-maps it still minimized. Clear it first.
         self.window.unminimize();
