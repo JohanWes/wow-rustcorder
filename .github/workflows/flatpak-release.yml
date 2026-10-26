@@ -147,7 +147,7 @@ jobs:
             curl make tar
           pacboy: >-
             gtk4:p libadwaita:p gstreamer:p gst-plugins-base:p gst-plugins-good:p
-            gst-plugins-bad:p gst-libav:p librsvg:p rust:p gcc:p pkgconf:p meson:p ninja:p
+            gst-plugins-bad:p librsvg:p rust:p gcc:p pkgconf:p meson:p ninja:p
       - name: Install Inno Setup
         shell: pwsh
         run: |
@@ -170,6 +170,7 @@ jobs:
           path: |
             build-windows/WarcraftRecorder-*-setup.exe
             build-windows/latest.json
+            build-windows/bundle-files.txt
           if-no-files-found: error
 
   publish:

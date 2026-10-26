@@ -7,12 +7,13 @@
 #   bash windows/build.sh
 #
 # Needs these MSYS2 packages (prefix mingw-w64-ucrt-x86_64-): gtk4 libadwaita
-# gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav rust
-# gcc pkgconf meson ninja librsvg, plus curl, tar, make and Inno Setup 6
+# gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad rust gcc pkgconf
+# meson ninja librsvg, plus curl, tar, make and Inno Setup 6
 # (`ISCC.exe` on PATH or in its default folder).
 #
 # Clapper and a minimal FFmpeg are built once and cached in build-windows/;
-# the app folder lands in build-windows/app and the installer beside it.
+# the app folder lands in build-windows/app and the installer beside it,
+# with bundle-files.txt listing every shipped file and its size.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -133,6 +134,8 @@ bundle() {
     cp "$prefix"/share/glib-2.0/schemas/org.gtk.gtk4.Settings.*.gschema.xml "$app/share/glib-2.0/schemas/"
     glib-compile-schemas "$app/share/glib-2.0/schemas"
     cp -r "$prefix/share/icons/Adwaita" "$app/share/icons/"
+    # Without the theme's cursors GTK falls back to the native Windows ones.
+    rm -rf "$app/share/icons/Adwaita/cursors"
     cp "$prefix/share/icons/hicolor/index.theme" "$app/share/icons/hicolor/"
     cp data/icons/io.github.JohanWes.WarcraftRecorder.svg "$app/share/icons/hicolor/scalable/apps/"
     gtk4-update-icon-cache -q -t -f "$app/share/icons/Adwaita" || true
@@ -142,6 +145,29 @@ bundle() {
         "$app/share/warcraft-recorder/"
 
     licenses
+    check_imports
+    (cd "$app" && find . -type f -printf '%s\t%P\n' | sort -t$'\t' -k2) >"$work/bundle-files.txt"
+}
+
+# Every DLL a shipped binary imports must ship too or come with Windows.
+# Most resolve from bin/; Clapper's importers import the Clapper plugin in
+# lib/, which Windows reuses because GStreamer has already loaded it.
+check_imports() {
+    local -A known=()
+    local missing=0 file dll
+    while IFS= read -r dll; do known[${dll,,}]=1; done < <(
+        find "$app" -type f -iname '*.dll' -printf '%f\n'
+        find /c/Windows/System32 -maxdepth 1 -type f -printf '%f\n'
+    )
+    while IFS= read -r -d '' file; do
+        for dll in $(objdump -p "$file" | sed -n 's/^\s*DLL Name: //p'); do
+            dll=${dll,,}
+            [[ -n ${known[$dll]:-} || $dll == api-ms-win-* || $dll == ext-ms-win-* ]] && continue
+            echo "missing: $file imports $dll" >&2
+            missing=1
+        done
+    done < <(find "$app" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0)
+    return "$missing"
 }
 
 # License texts for everything shipped: each MSYS2 package that owns a copied
