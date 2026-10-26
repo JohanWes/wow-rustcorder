@@ -109,6 +109,8 @@ copy_with_deps() { # file destdir
 bundle() {
     rm -rf "$app"
     copy_with_deps native/target/release/warcraft-recorder.exe "$app/bin"
+    # Debug symbols are half the binary.
+    strip "$app/bin/warcraft-recorder.exe"
     copy_with_deps wr-capture/target/release/wr-capture.exe "$app/bin"
     cp "$work/ffmpeg/ffmpeg.exe" "$app/bin/"
     # GLib's D-Bus session bus (single instance) autolaunches through gdbus.
@@ -123,9 +125,9 @@ bundle() {
         copy_with_deps "$plugin" "$app/lib/clapper-0.0/gst/plugin/importers"
     done
 
-    # Icons are SVG. The cache lists loaders relative to the install root.
+    # GTK renders SVG icons itself, so librsvg's loader is not needed.
+    # The cache lists loaders relative to the install root.
     local loaders=lib/gdk-pixbuf-2.0/2.10.0
-    copy_with_deps "$prefix/$loaders/loaders/pixbufloader_svg.dll" "$app/$loaders/loaders"
     copy_with_deps "$prefix/$loaders/loaders/libpixbufloader-png.dll" "$app/$loaders/loaders"
     gdk-pixbuf-query-loaders "$app/$loaders"/loaders/*.dll |
         sed "s|$(cygpath -m "$app")/||" >"$app/$loaders/loaders.cache"
