@@ -391,8 +391,15 @@ impl Player {
         let key = gtk4::EventControllerKey::new();
         key.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let key_window = window.clone();
-        key.connect_key_pressed(move |controller, keyval, _, _| {
-            if !window_owns_keys(&key_window, controller) || inner.active_id.borrow().is_none() {
+        key.connect_key_pressed(move |controller, keyval, _, state| {
+            // Alt+Space, Ctrl+L and the like belong to the system and app.
+            let modifiers = gtk4::gdk::ModifierType::CONTROL_MASK
+                | gtk4::gdk::ModifierType::ALT_MASK
+                | gtk4::gdk::ModifierType::SUPER_MASK;
+            if state.intersects(modifiers)
+                || !window_owns_keys(&key_window, controller)
+                || inner.active_id.borrow().is_none()
+            {
                 return gtk4::glib::Propagation::Proceed;
             }
             inner.handle_key(keyval)
