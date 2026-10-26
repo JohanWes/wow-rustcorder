@@ -14,7 +14,7 @@ use windows::Graphics::Capture::{
 use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
 use windows::Graphics::DirectX::DirectXPixelFormat;
 use windows::Graphics::SizeInt32;
-use windows::Win32::Foundation::{CloseHandle, HMODULE, HWND, LPARAM, POINT};
+use windows::Win32::Foundation::{CloseHandle, HMODULE, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
 };
@@ -24,10 +24,11 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11CreateDevice, ID3D11Device,
     ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
 };
+use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint,
+    ClientToScreen, GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
@@ -37,7 +38,8 @@ use windows::Win32::System::WinRT::Direct3D11::{
 };
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GW_OWNER, GetWindow, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
+    EnumWindows, GW_OWNER, GetClientRect, GetWindow, GetWindowThreadProcessId, IsWindow,
+    IsWindowVisible,
 };
 use windows::core::{BOOL, Interface, PWSTR};
 
@@ -397,6 +399,19 @@ impl Capture {
         if width == 0 || height == 0 {
             return Ok(false);
         }
+        let full = D3D11_BOX {
+            left: 0,
+            top: 0,
+            front: 0,
+            right: width,
+            bottom: height,
+            back: 1,
+        };
+        let region = active
+            .window
+            .and_then(|window| client_area(window, full))
+            .unwrap_or(full);
+        let (width, height) = (region.right - region.left, region.bottom - region.top);
         if self
             .latest
             .as_ref()
@@ -405,17 +420,39 @@ impl Capture {
             self.latest = Some((create_bgra(&self.device, width, height)?, width, height));
         }
         let (latest, _, _) = self.latest.as_ref().expect("set above");
-        let region = D3D11_BOX {
-            left: 0,
-            top: 0,
-            front: 0,
-            right: width,
-            bottom: height,
-            back: 1,
-        };
         unsafe { context.CopySubresourceRegion(latest, 0, 0, 0, 0, &texture, 0, Some(&region)) };
         Ok(true)
     }
+}
+
+/// The game's part of a captured window, whose frame includes a windowed
+/// game's title bar and borders.
+fn client_area(window: HWND, frame: D3D11_BOX) -> Option<D3D11_BOX> {
+    let mut bounds = RECT::default();
+    let mut client = RECT::default();
+    let mut origin = POINT::default();
+    unsafe {
+        DwmGetWindowAttribute(
+            window,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&raw mut bounds).cast(),
+            size_of::<RECT>() as u32,
+        )
+        .ok()?;
+        GetClientRect(window, &mut client).ok()?;
+        ClientToScreen(window, &mut origin).ok().ok()?;
+    }
+    let left = u32::try_from(origin.x - bounds.left).ok()?;
+    let top = u32::try_from(origin.y - bounds.top).ok()?;
+    let right = (left + client.right as u32).min(frame.right);
+    let bottom = (top + client.bottom as u32).min(frame.bottom);
+    (right > left && bottom > top).then_some(D3D11_BOX {
+        left,
+        top,
+        right,
+        bottom,
+        ..frame
+    })
 }
 
 pub fn create_bgra(
