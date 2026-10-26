@@ -458,7 +458,7 @@ impl Storage {
     fn delete_one(&self, entry: &LibraryEntry) -> Result<(), String> {
         self.check_owned(&entry.media_path)?;
         self.check_owned(&entry.sidecar_path)?;
-        fs::remove_file(&entry.media_path).map_err(|error| format!("media: {error}"))?;
+        remove_media(&entry.media_path).map_err(|error| format!("media: {error}"))?;
         match fs::remove_file(&entry.sidecar_path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -1700,6 +1700,21 @@ pub fn now_unix_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis() as i64)
         .unwrap_or(0)
+}
+
+/// Windows cannot delete a file that is still open, and the player closes a
+/// recording it was showing only shortly after being told to.
+fn remove_media(path: &Path) -> io::Result<()> {
+    const SHARING_VIOLATION: i32 = 32;
+    for _ in 0..20 {
+        match fs::remove_file(path) {
+            Err(error) if cfg!(windows) && error.raw_os_error() == Some(SHARING_VIOLATION) => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
+    fs::remove_file(path)
 }
 
 /// Unique temporary root for one test tree, `wr-<prefix>-<uuid>`.

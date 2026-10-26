@@ -973,7 +973,13 @@ impl Inner {
         dialog.set_close_response("cancel");
         let this = Rc::clone(self);
         dialog.connect_response(None, move |_, response| {
-            if response == "delete" && this.send_mutation(Command::Delete { ids: ids.clone() }) {
+            if response != "delete" {
+                return;
+            }
+            // The player lets go of the file first: Windows cannot delete
+            // one that is open.
+            (this.on_select)(None);
+            if this.send_mutation(Command::Delete { ids: ids.clone() }) {
                 *this.state.deleting.borrow_mut() = primaries.clone();
             }
         });
