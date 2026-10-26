@@ -40,7 +40,7 @@ fn run_check(parent: &gtk4::Widget, report_current: bool) {
             .await
             .unwrap_or_else(|_| Err("the update check crashed".into()));
         match latest {
-            Ok(latest) if is_newer(&latest.version, env!("CARGO_PKG_VERSION")) => {
+            Ok(Some(latest)) if is_newer(&latest.version, env!("CARGO_PKG_VERSION")) => {
                 offer(&parent, latest)
             }
             Ok(_) if report_current => info(
@@ -90,15 +90,24 @@ fn install(parent: &gtk4::Widget, latest: Latest) {
     });
 }
 
-fn fetch_latest() -> Result<Latest, String> {
+/// `None` until the first Windows release publishes its manifest (404).
+fn fetch_latest() -> Result<Option<Latest>, String> {
     let output = process::command("curl.exe")
-        .args(["-fsSL", "--max-time", "20", MANIFEST_URL])
+        .args(["-sSL", "--max-time", "20", "-w", "\n%{http_code}", MANIFEST_URL])
         .output()
         .map_err(|error| format!("curl.exe: {error}"))?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
     }
-    serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())
+    let text = String::from_utf8_lossy(&output.stdout);
+    let (body, code) = text.rsplit_once('\n').unwrap_or(("", &text));
+    match code.trim() {
+        "200" => serde_json::from_str(body)
+            .map(Some)
+            .map_err(|error| error.to_string()),
+        "404" => Ok(None),
+        code => Err(format!("the update server answered HTTP {code}")),
+    }
 }
 
 fn download_and_start(latest: &Latest) -> Result<(), String> {
