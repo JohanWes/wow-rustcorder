@@ -27,7 +27,7 @@ pub struct SpellInfo {
     #[serde(borrow)]
     pub description: Cow<'static, str>,
     /// Icon basename, e.g. `spell_fire_flamebolt`; the PNG lives at
-    /// `/io/github/JohanWes/WarcraftRecorder/spells/{icon}.png`.
+    /// `/io/github/JohanWes/WarcraftRustcorder/spells/{icon}.png`.
     pub icon: &'static str,
 }
 

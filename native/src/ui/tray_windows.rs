@@ -62,7 +62,7 @@ impl TrayBackend {
             events,
             wake,
             quit_requested: Arc::clone(&quit_requested),
-            title: Mutex::new("Warcraft Recorder".into()),
+            title: Mutex::new("Warcraft Rustcorder".into()),
             // SAFETY: a valid NUL-terminated string.
             taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
         };
@@ -114,7 +114,7 @@ fn run(ready: mpsc::Sender<Result<usize, String>>) {
     // SAFETY: plain Win32 window and message-loop calls on this thread.
     unsafe {
         let instance = GetModuleHandleW(std::ptr::null());
-        let class = wide("WarcraftRecorderTray");
+        let class = wide("WarcraftRustcorderTray");
         let window_class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: instance,

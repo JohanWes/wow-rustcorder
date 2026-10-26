@@ -108,9 +108,9 @@ copy_with_deps() { # file destdir
 
 bundle() {
     rm -rf "$app"
-    copy_with_deps native/target/release/warcraft-recorder.exe "$app/bin"
+    copy_with_deps native/target/release/warcraft-rustcorder.exe "$app/bin"
     # Debug symbols are half the binary.
-    strip "$app/bin/warcraft-recorder.exe"
+    strip "$app/bin/warcraft-rustcorder.exe"
     copy_with_deps wr-capture/target/release/wr-capture.exe "$app/bin"
     cp "$work/ffmpeg/ffmpeg.exe" "$app/bin/"
     # GLib's D-Bus session bus (single instance) autolaunches through gdbus.
@@ -139,12 +139,12 @@ bundle() {
     # Without the theme's cursors GTK falls back to the native Windows ones.
     rm -rf "$app/share/icons/Adwaita/cursors"
     cp "$prefix/share/icons/hicolor/index.theme" "$app/share/icons/hicolor/"
-    cp data/icons/io.github.JohanWes.WarcraftRecorder.svg "$app/share/icons/hicolor/scalable/apps/"
+    cp data/icons/io.github.JohanWes.WarcraftRustcorder.svg "$app/share/icons/hicolor/scalable/apps/"
     gtk4-update-icon-cache -q -t -f "$app/share/icons/Adwaita" || true
 
-    mkdir -p "$app/share/warcraft-recorder"
-    cp "$(ls -t native/target/release/build/warcraft-recorder-*/out/spells.gresource | head -1)" \
-        "$app/share/warcraft-recorder/"
+    mkdir -p "$app/share/warcraft-rustcorder"
+    cp "$(ls -t native/target/release/build/warcraft-rustcorder-*/out/spells.gresource | head -1)" \
+        "$app/share/warcraft-rustcorder/"
 
     licenses
     check_imports
@@ -179,7 +179,7 @@ licenses() {
     mkdir -p "$dir"
     # The repository LICENSE is the legacy app's GPLv2 text; as in the
     # Flatpak, Clapper's GPLv3 text stands in for the app's.
-    cp "$work/clapper-0.10.0/COPYING-GPL" "$dir/WarcraftRecorder-GPL-3.0-or-later"
+    cp "$work/clapper-0.10.0/COPYING-GPL" "$dir/WarcraftRustcorder-GPL-3.0-or-later"
     mkdir -p "$dir/clapper" "$dir/ffmpeg"
     cp "$work"/clapper-0.10.0/COPYING-* "$dir/clapper/"
     cp "$work/ffmpeg/COPYING.LGPLv3" "$dir/ffmpeg/"
@@ -203,11 +203,11 @@ installer() {
 
 # The update manifest the app reads once it is copied to GitHub Pages.
 manifest() {
-    local file=WarcraftRecorder-$version-setup.exe
+    local file=WarcraftRustcorder-$version-setup.exe
     local sum
     sum=$(sha256sum "$work/$file" | cut -d' ' -f1)
     printf '{"version":"%s","url":"%s","sha256":"%s"}\n' "$version" \
-        "https://github.com/JohanWes/wow-recorder-linuxwayland/releases/download/v$version/$file" \
+        "https://github.com/JohanWes/wow-rustcorder/releases/download/v$version/$file" \
         "$sum" >"$work/latest.json"
 }
 

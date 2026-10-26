@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 
-use warcraft_recorder::domain::{
+use warcraft_rustcorder::domain::{
     Category, DeathMarkerVisibility, LibraryEntry, MarkerVisibility, Outcome, TimelineItem,
     TimelineKind, TimelineShape,
 };
@@ -617,7 +617,7 @@ fn rounded_bar(cr: &gtk4::cairo::Context, x: f64, y: f64, width: f64, height: f6
 #[cfg(test)]
 mod tests {
     use super::*;
-    use warcraft_recorder::domain::PlayerSummary;
+    use warcraft_rustcorder::domain::PlayerSummary;
 
     fn entry_with(category: Category, timeline: Vec<TimelineItem>) -> LibraryEntry {
         let mut entry = crate::ui::window::tests::entry(category, "T", 0);

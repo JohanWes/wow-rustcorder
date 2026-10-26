@@ -223,6 +223,7 @@ impl Setup {
     pub fn from_environment() -> Result<Self, ConfigError> {
         let (year, utc_offset_minutes) = local_clock();
         let config_path = crate::config::config_path_from_environment()?;
+        crate::config::migrate_old_config(&config_path);
         let data_dir = config_path
             .parent()
             .unwrap_or(Path::new("."))
@@ -254,7 +255,7 @@ fn ipc_socket_path(data_dir: &Path) -> PathBuf {
     };
     match std::env::var_os("FLATPAK_ID") {
         Some(id) => runtime.join("app").join(id).join("gsr.sock"),
-        None => runtime.join("warcraft-recorder-gsr.sock"),
+        None => runtime.join("warcraft-rustcorder-gsr.sock"),
     }
 }
 

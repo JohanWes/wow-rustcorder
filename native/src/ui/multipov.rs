@@ -4,7 +4,7 @@
 //! correlated activity offers, how they are labelled, and which one to open.
 //! The player shows one viewpoint at a time.
 
-use warcraft_recorder::domain::{LibraryEntry, RecordingId};
+use warcraft_rustcorder::domain::{LibraryEntry, RecordingId};
 
 use super::filters::spec_name;
 use super::timeline::plain_name;
@@ -60,7 +60,7 @@ pub fn choose<'a>(povs: &'a [Pov], preferred_player: Option<&str>) -> Option<&'a
 #[cfg(test)]
 mod tests {
     use super::*;
-    use warcraft_recorder::domain::{Category, PlayerSummary};
+    use warcraft_rustcorder::domain::{Category, PlayerSummary};
 
     fn entry(player: Option<(&str, u16)>, title: &str) -> LibraryEntry {
         let mut entry = crate::ui::window::tests::entry(Category::Raids, title, 0);

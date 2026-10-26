@@ -21,7 +21,9 @@ use crate::domain::{
 };
 
 const CONFIG_VERSION: u32 = 1;
-pub const APP_ID: &str = "io.github.JohanWes.WarcraftRecorder";
+pub const APP_ID: &str = "io.github.JohanWes.WarcraftRustcorder";
+/// The app ID before the rename from Warcraft Recorder.
+const OLD_APP_ID: &str = "io.github.JohanWes.WarcraftRecorder";
 pub const CONFIG_FILENAME: &str = "config.json";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -608,6 +610,47 @@ fn write_atomic(config: &Config, path: &Path) -> Result<(), ConfigError> {
     result
 }
 
+/// Flatpak's rename moves the app's data directory but not the config folder
+/// named after the old app ID inside it, so move that folder here. Folders
+/// granted through the document portal belong to the old app ID and must be
+/// chosen again.
+pub fn migrate_old_config(config_path: &Path) {
+    let Some(dir) = config_path.parent() else {
+        return;
+    };
+    let old = dir.with_file_name(OLD_APP_ID);
+    if dir.exists() || !old.is_dir() {
+        return;
+    }
+    if let Err(error) = fs::rename(&old, dir) {
+        tracing::warn!(%error, "could not move the old config folder");
+        return;
+    }
+    let Ok(mut config) = Config::load(config_path) else {
+        return;
+    };
+    let flavors = &mut config.flavors;
+    for path in [
+        &mut config.storage.recording_dir,
+        &mut flavors.retail.log_dir,
+        &mut flavors.retail_ptr.log_dir,
+        &mut flavors.classic.log_dir,
+        &mut flavors.classic_ptr.log_dir,
+        &mut flavors.era.log_dir,
+    ] {
+        let portal = path
+            .path
+            .strip_prefix("/run/user")
+            .is_ok_and(|rest| rest.iter().nth(1) == Some(OsStr::new("doc")));
+        if portal && path.authorization == PathAuthorization::Authorized {
+            path.authorization = PathAuthorization::ImportedInactive;
+        }
+    }
+    if let Err(error) = config.save(config_path) {
+        tracing::warn!(%error, "could not save the migrated config");
+    }
+}
+
 pub fn config_path_from_environment() -> Result<PathBuf, ConfigError> {
     #[cfg(windows)]
     return config_path_from_values(env::var_os("APPDATA"), None);
@@ -738,6 +781,27 @@ mod tests {
             log_dir: AuthorizedPath::authorized("/games/wow/_retail_/Logs"),
         };
         config
+    }
+
+    #[test]
+    fn old_config_folder_moves_and_portal_folders_need_choosing_again() {
+        let root = temporary_directory("config-migrate");
+        let path = root.join(APP_ID).join(CONFIG_FILENAME);
+        let mut config = ready_config();
+        config.storage.recording_dir = AuthorizedPath::authorized("/run/user/1000/doc/ab12/Rec");
+        config
+            .save(&root.join(OLD_APP_ID).join(CONFIG_FILENAME))
+            .expect("save old config");
+
+        migrate_old_config(&path);
+
+        let migrated = Config::load(&path).expect("load migrated config");
+        assert!(!root.join(OLD_APP_ID).exists());
+        assert_eq!(
+            migrated.storage.recording_dir.authorization,
+            PathAuthorization::ImportedInactive
+        );
+        assert!(migrated.flavors.retail.log_dir.is_authorized());
     }
 
     #[test]

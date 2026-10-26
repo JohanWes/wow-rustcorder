@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 [package]
-name = "warcraft-recorder"
+name = "warcraft-rustcorder"
 version = "1.0.15"
 edition = "2024"
 license = "GPL-3.0-or-later"
@@ -11,7 +11,7 @@ publish = false
 path = "src/lib.rs"
 
 [[bin]]
-name = "warcraft-recorder"
+name = "warcraft-rustcorder"
 path = "src/main.rs"
 
 [dependencies]

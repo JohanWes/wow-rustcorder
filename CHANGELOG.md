@@ -7,6 +7,14 @@ Notable changes to the native Linux/Wayland application. The format follows
 Release history before the native rewrite belongs to the upstream Electron
 project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 
+## Unreleased
+
+### Changed
+- Renamed to Warcraft Rustcorder (app ID `io.github.JohanWes.WarcraftRustcorder`,
+  repository `JohanWes/wow-rustcorder`). Existing installs move over on their
+  next `flatpak update`, settings included; choose the combat-log and recording
+  folders again in Settings.
+
 ## 1.0.15 - 2026-10-10
 
 ### Changed

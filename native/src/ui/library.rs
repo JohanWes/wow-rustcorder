@@ -27,8 +27,8 @@ use gtk4::{gio, glib};
 use libadwaita as adw;
 use libadwaita::prelude::*;
 
-use warcraft_recorder::coordinator::{AppSnapshot, Command};
-use warcraft_recorder::domain::{ActivityDetails, Category, LibraryEntry, Outcome, RecordingId};
+use warcraft_rustcorder::coordinator::{AppSnapshot, Command};
+use warcraft_rustcorder::domain::{ActivityDetails, Category, LibraryEntry, Outcome, RecordingId};
 
 use super::filters::{self, Chip};
 use super::{ActionSink, LayoutStore, ShellAction};
@@ -399,7 +399,7 @@ struct State {
     /// and progress snapshots reuse these Arcs, so retaining them lets the GTK
     /// thread avoid rebuilding row metadata for unrelated updates.
     entries: RefCell<Option<Arc<Vec<LibraryEntry>>>>,
-    correlations: RefCell<Option<Arc<Vec<warcraft_recorder::domain::CorrelatedActivity>>>>,
+    correlations: RefCell<Option<Arc<Vec<warcraft_rustcorder::domain::CorrelatedActivity>>>>,
 }
 
 pub struct Library {

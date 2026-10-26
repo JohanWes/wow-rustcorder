@@ -11,10 +11,9 @@ use std::path::PathBuf;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use serde::Deserialize;
-use warcraft_recorder::process;
+use warcraft_rustcorder::process;
 
-const MANIFEST_URL: &str =
-    "https://johanwes.github.io/wow-recorder-linuxwayland/windows/latest.json";
+const MANIFEST_URL: &str = "https://johanwes.github.io/wow-rustcorder/windows/latest.json";
 
 #[derive(Clone, Debug, Deserialize)]
 struct Latest {
@@ -45,7 +44,7 @@ fn run_check(parent: &gtk4::Widget, report_current: bool) {
             }
             Ok(_) if report_current => info(
                 &parent,
-                "Warcraft Recorder is up to date",
+                "Warcraft Rustcorder is up to date",
                 &format!("Version {} is the latest.", env!("CARGO_PKG_VERSION")),
             ),
             Err(error) if report_current => info(
@@ -64,7 +63,7 @@ fn offer(parent: &gtk4::Widget, latest: Latest) {
     let dialog = adw::AlertDialog::new(
         Some(&format!("Update to version {}?", latest.version)),
         Some(
-            "Warcraft Recorder closes while the update installs and starts again \
+            "Warcraft Rustcorder closes while the update installs and starts again \
              afterwards. A recording in progress is cut short.",
         ),
     );
@@ -119,7 +118,7 @@ fn fetch_latest() -> Result<Option<Latest>, String> {
 
 fn download_and_start(latest: &Latest) -> Result<(), String> {
     let path = std::env::temp_dir().join(format!(
-        "WarcraftRecorder-{}-setup.exe",
+        "WarcraftRustcorder-{}-setup.exe",
         latest.version.replace(['/', '\\'], "")
     ));
     let status = process::command("curl.exe")

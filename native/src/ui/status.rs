@@ -10,10 +10,10 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 
-use warcraft_recorder::config::Config;
-use warcraft_recorder::coordinator::AppSnapshot;
-use warcraft_recorder::domain::{Problem, RecorderStatus, RecoveryAction};
-use warcraft_recorder::storage::now_unix_ms;
+use warcraft_rustcorder::config::Config;
+use warcraft_rustcorder::coordinator::AppSnapshot;
+use warcraft_rustcorder::domain::{Problem, RecorderStatus, RecoveryAction};
+use warcraft_rustcorder::storage::now_unix_ms;
 
 use super::{ActionSink, ShellAction, clear_box, format_clock};
 
@@ -201,7 +201,7 @@ pub(crate) fn shell_action(action: RecoveryAction) -> ShellAction {
     match action {
         RecoveryAction::OpenSettings => ShellAction::OpenSettings,
         RecoveryAction::ReselectCaptureTarget => {
-            ShellAction::Command(warcraft_recorder::coordinator::Command::ReselectCaptureTarget)
+            ShellAction::Command(warcraft_rustcorder::coordinator::Command::ReselectCaptureTarget)
         }
         RecoveryAction::Retry => ShellAction::Retry,
         RecoveryAction::OpenLogs => ShellAction::OpenLogs,
@@ -346,7 +346,7 @@ impl StatusCard {
             let force_end_widget = force_end.clone();
             force_end.connect_clicked(move |_| {
                 if !sink(ShellAction::Command(
-                    warcraft_recorder::coordinator::Command::ForceEnd,
+                    warcraft_rustcorder::coordinator::Command::ForceEnd,
                 )) {
                     force_end_widget.set_sensitive(false);
                     let force_end_widget = force_end_widget.clone();
@@ -366,7 +366,7 @@ impl StatusCard {
         problems_expander.set_visible(false);
 
         let tray_note = gtk4::Label::new(Some(
-            "No system tray found: closing the window quits Warcraft Recorder.",
+            "No system tray found: closing the window quits Warcraft Rustcorder.",
         ));
         tray_note.set_xalign(0.0);
         tray_note.set_wrap(true);

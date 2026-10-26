@@ -20,11 +20,11 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 
-use warcraft_recorder::config::{AuthorizedPath, Config, ValidationProblem};
-use warcraft_recorder::coordinator::{AppSnapshot, Command};
-use warcraft_recorder::domain::{Codec, RaidDifficulty, RecorderStatus, StorageLimit};
-use warcraft_recorder::recorder::{AudioDevice, Recorder};
-use warcraft_recorder::storage::now_unix_ms;
+use warcraft_rustcorder::config::{AuthorizedPath, Config, ValidationProblem};
+use warcraft_rustcorder::coordinator::{AppSnapshot, Command};
+use warcraft_rustcorder::domain::{Codec, RaidDifficulty, RecorderStatus, StorageLimit};
+use warcraft_rustcorder::recorder::{AudioDevice, Recorder};
+use warcraft_rustcorder::storage::now_unix_ms;
 
 use super::operational_actions::present_reselect_dialog;
 use super::{ActionSink, ShellAction};
@@ -471,7 +471,10 @@ pub fn apply_outcome(draft: &Config) -> ApplyOutcome {
 pub fn probe_folder(path: &Path, needs_write: bool) -> Result<(), String> {
     std::fs::read_dir(path).map_err(|error| format!("The folder cannot be read: {error}"))?;
     if needs_write {
-        let probe = path.join(format!(".warcraft-recorder-probe-{}", uuid::Uuid::new_v4()));
+        let probe = path.join(format!(
+            ".warcraft-rustcorder-probe-{}",
+            uuid::Uuid::new_v4()
+        ));
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -778,7 +781,7 @@ impl Settings {
             interface_group.add(&switch_row(spec, &draft, &registry, &refresh));
         }
         let tray_note = gtk4::Label::new(Some(
-            "No system tray was found, so closing the window quits Warcraft Recorder.",
+            "No system tray was found, so closing the window quits Warcraft Rustcorder.",
         ));
         tray_note.set_wrap(true);
         tray_note.set_xalign(0.0);
@@ -1145,7 +1148,7 @@ impl Settings {
             let result = gtk4::gio::spawn_blocking(|| Recorder::new().audio_devices())
                 .await
                 .unwrap_or_else(|_| {
-                    Err(warcraft_recorder::recorder::RecorderError::SpawnFailed {
+                    Err(warcraft_rustcorder::recorder::RecorderError::SpawnFailed {
                         message: "audio discovery crashed".to_owned(),
                         log_tail: String::new(),
                     })
@@ -1162,7 +1165,7 @@ impl Settings {
                     group.set_description(Some(&format!(
                         "Audio devices could not be listed ({error:?}). The saved selection is kept."
                     )));
-                    warcraft_recorder::recorder::AudioDevices::default()
+                    warcraft_rustcorder::recorder::AudioDevices::default()
                 }
             };
             let (selected_output, selected_input) = {
@@ -1416,7 +1419,7 @@ fn path_row(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use warcraft_recorder::config::{FlavorConfig, PathAuthorization};
+    use warcraft_rustcorder::config::{FlavorConfig, PathAuthorization};
 
     fn ready_config() -> Config {
         let mut config = Config::default();

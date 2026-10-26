@@ -1,6 +1,6 @@
 # Contributing
 
-Warcraft Recorder is developed as one Rust package under `native/` and is
+Warcraft Rustcorder is developed as one Rust package under `native/` and is
 packaged as a Flatpak. GTK widgets stay on the GTK main thread; the
 coordinator owns domain state and one serialized worker performs blocking
 media/storage work. Keep core modules free of GTK imports and use typed
@@ -28,7 +28,7 @@ patch behavior.
 
 ## Packaging
 
-Use `flatpak/io.github.JohanWes.WarcraftRecorder.Devel.yml` for development
+Use `flatpak/io.github.JohanWes.WarcraftRustcorder.Devel.yml` for development
 iteration. Release builds use the stable manifest, the locked
 `flatpak/cargo-sources.json`, and the tag-triggered workflow in
 `.github/workflows/flatpak-release.yml`.

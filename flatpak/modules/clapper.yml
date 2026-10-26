@@ -20,7 +20,7 @@ post-install:
   # The native rewrite is GPL-3.0-or-later. The repository-root LICENSE is
   # the untouched GPLv2 text for the deleted legacy app, so use Clapper's
   # canonical GPLv3 text rather than mislabelling the legacy file.
-  - install -Dm644 ../COPYING-GPL /app/share/licenses/$FLATPAK_ID/WarcraftRecorder-GPL-3.0-or-later
+  - install -Dm644 ../COPYING-GPL /app/share/licenses/$FLATPAK_ID/WarcraftRustcorder-GPL-3.0-or-later
 sources:
   - type: archive
     url: https://github.com/Rafostar/clapper/archive/refs/tags/0.10.0.tar.gz

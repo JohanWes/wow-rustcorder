@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* Warcraft Recorder shell hooks. Everything else is libadwaita defaults. */
+/* Warcraft Rustcorder shell hooks. Everything else is libadwaita defaults. */
 
 /* Warm red/orange accent derived from the current app (App.css #bb4220). */
 @define-color accent_bg_color #bb4220;

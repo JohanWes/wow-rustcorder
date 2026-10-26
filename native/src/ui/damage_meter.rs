@@ -15,14 +15,14 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 
-use warcraft_recorder::domain::{
+use warcraft_rustcorder::domain::{
     LibraryEntry, MeterData, MeterDeath, MeterDeathEventKind, MeterFight, MeterMetric,
 };
-use warcraft_recorder::meter::{
+use warcraft_rustcorder::meter::{
     MeterProjection, ProjectedActor, ProjectedEntry, SAMPLE_INTERVAL_MS, fight_index_at,
     has_untimed_totals, is_count_metric, project_current, project_overall,
 };
-use warcraft_recorder::spelldb::SpellDb;
+use warcraft_rustcorder::spelldb::SpellDb;
 
 use super::filters::class_css_class;
 use super::format_clock;
@@ -75,8 +75,8 @@ const TOOLTIP_GAP: i32 = 8;
 /// The small spell icon shown on each spell row, in pixels.
 const SPELL_ICON_SIZE: i32 = 20;
 /// Resource paths for the bundled spell database and its icons.
-const SPELLS_JSON_RESOURCE: &str = "/io/github/JohanWes/WarcraftRecorder/spells/spells.json";
-const SPELL_ICON_RESOURCE: &str = "/io/github/JohanWes/WarcraftRecorder/spells/";
+const SPELLS_JSON_RESOURCE: &str = "/io/github/JohanWes/WarcraftRustcorder/spells/spells.json";
+const SPELL_ICON_RESOURCE: &str = "/io/github/JohanWes/WarcraftRustcorder/spells/";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum View {

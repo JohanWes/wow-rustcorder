@@ -1,4 +1,4 @@
-name: Warcraft Recorder Flatpak
+name: Warcraft Rustcorder Flatpak
 
 on:
   pull_request:
@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 env:
-  APP_ID: io.github.JohanWes.WarcraftRecorder
-  MANIFEST: flatpak/io.github.JohanWes.WarcraftRecorder.yml
+  APP_ID: io.github.JohanWes.WarcraftRustcorder
+  MANIFEST: flatpak/io.github.JohanWes.WarcraftRustcorder.yml
 
 jobs:
   flatpak:
@@ -34,7 +34,7 @@ jobs:
         uses: flatpak/flatpak-github-actions/flatpak-builder@401fe28a8384095fc1531b9d320b292f0ee45adb # v6.7
         with:
           manifest-path: ${{ env.MANIFEST }}
-          bundle: warcraft-recorder.flatpak
+          bundle: warcraft-rustcorder.flatpak
           build-dir: build-flatpak
           repo-dir: repo
           branch: stable
@@ -43,17 +43,17 @@ jobs:
       - name: Add mirrored AppStream screenshot
         run: |
           ostree --repo=repo refs --delete \
-            runtime/io.github.JohanWes.WarcraftRecorder.Debug/x86_64/stable || true
+            runtime/io.github.JohanWes.WarcraftRustcorder.Debug/x86_64/stable || true
           mkdir -p screenshot-tree
           cp data/screenshots/*.png screenshot-tree/
           ostree --repo=repo commit --branch=screenshots/x86_64 \
-            --subject='Warcraft Recorder AppStream screenshots' screenshot-tree
+            --subject='Warcraft Rustcorder AppStream screenshots' screenshot-tree
           flatpak build-update-repo repo
       - name: Validate release inputs
         run: |
           flatpak-builder-lint --exceptions --user-exceptions flatpak/lint-exceptions.json manifest "$MANIFEST"
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
-            flatpak-builder-lint --appid "$APP_ID" appstream data/io.github.JohanWes.WarcraftRecorder.metainfo.xml
+            flatpak-builder-lint --appid "$APP_ID" appstream data/io.github.JohanWes.WarcraftRustcorder.metainfo.xml
           else
             echo 'AppStream URL validation runs after the screenshot is present on main.'
           fi
@@ -63,8 +63,8 @@ jobs:
       - name: Upload candidate artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: warcraft-recorder-flatpak-candidate
-          path: warcraft-recorder.flatpak
+          name: warcraft-rustcorder-flatpak-candidate
+          path: warcraft-rustcorder.flatpak
           if-no-files-found: error
 
   release:
@@ -91,7 +91,7 @@ jobs:
         uses: flatpak/flatpak-github-actions/flatpak-builder@401fe28a8384095fc1531b9d320b292f0ee45adb # v6.7
         with:
           manifest-path: ${{ env.MANIFEST }}
-          bundle: warcraft-recorder.flatpak
+          bundle: warcraft-rustcorder.flatpak
           build-dir: build-flatpak
           repo-dir: repo
           branch: stable
@@ -103,30 +103,41 @@ jobs:
           FLATPAK_GPG_KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
         run: |
           ostree --repo=repo refs --delete \
-            runtime/io.github.JohanWes.WarcraftRecorder.Debug/x86_64/stable || true
+            runtime/io.github.JohanWes.WarcraftRustcorder.Debug/x86_64/stable || true
           mkdir -p screenshot-tree
           cp data/screenshots/*.png screenshot-tree/
           ostree --repo=repo commit --gpg-sign="$FLATPAK_GPG_KEY_ID" \
             --branch=screenshots/x86_64 \
-            --subject='Warcraft Recorder AppStream screenshots' screenshot-tree
+            --subject='Warcraft Rustcorder AppStream screenshots' screenshot-tree
       - name: Validate signed outputs
         env:
           FLATPAK_GPG_KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
         run: |
           flatpak-builder-lint --exceptions --user-exceptions flatpak/lint-exceptions.json manifest "$MANIFEST"
-          flatpak-builder-lint --appid "$APP_ID" --exceptions --user-exceptions flatpak/lint-exceptions.json appstream data/io.github.JohanWes.WarcraftRecorder.metainfo.xml
+          flatpak-builder-lint --appid "$APP_ID" --exceptions --user-exceptions flatpak/lint-exceptions.json appstream data/io.github.JohanWes.WarcraftRustcorder.metainfo.xml
           flatpak-builder-lint --exceptions --user-exceptions flatpak/lint-exceptions.json repo repo
+          # The app was renamed from Warcraft Recorder: installs of the old ID
+          # move to the new one, data included, on their next update.
+          flatpak build-commit-from --gpg-sign="$FLATPAK_GPG_KEY_ID" \
+            --src-ref="app/$APP_ID/x86_64/stable" \
+            --end-of-life-rebase="io.github.JohanWes.WarcraftRecorder=$APP_ID" \
+            repo app/io.github.JohanWes.WarcraftRecorder/x86_64/stable
           bash scripts/prepare-flatpakrepo.sh repo
-          sha256sum warcraft-recorder.flatpak > warcraft-recorder.flatpak.sha256
-          sha256sum repo/summary repo/index.flatpakrepo >> warcraft-recorder.flatpak.sha256
+          # Served at the pre-rename URL: points old remotes at the new one.
+          ostree init --mode=archive-z2 --repo=redirect-repo
+          flatpak build-update-repo --gpg-sign="$FLATPAK_GPG_KEY_ID" \
+            --redirect-url=https://johanwes.github.io/wow-rustcorder/ redirect-repo
+          sha256sum warcraft-rustcorder.flatpak > warcraft-rustcorder.flatpak.sha256
+          sha256sum repo/summary repo/index.flatpakrepo >> warcraft-rustcorder.flatpak.sha256
       - name: Upload release-candidate artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: warcraft-recorder-flatpak-${{ github.ref_name }}
+          name: warcraft-rustcorder-flatpak-${{ github.ref_name }}
           path: |
-            warcraft-recorder.flatpak
-            warcraft-recorder.flatpak.sha256
+            warcraft-rustcorder.flatpak
+            warcraft-rustcorder.flatpak.sha256
             repo
+            redirect-repo
           if-no-files-found: error
 
   windows:
@@ -166,9 +177,9 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: warcraft-recorder-windows
+          name: warcraft-rustcorder-windows
           path: |
-            build-windows/WarcraftRecorder-*-setup.exe
+            build-windows/WarcraftRustcorder-*-setup.exe
             build-windows/latest.json
             build-windows/bundle-files.txt
           if-no-files-found: error
@@ -185,12 +196,12 @@ jobs:
       - name: Download signed candidate
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: warcraft-recorder-flatpak-${{ github.ref_name }}
+          name: warcraft-rustcorder-flatpak-${{ github.ref_name }}
           path: candidate
       - name: Download Windows installer
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: warcraft-recorder-windows
+          name: warcraft-rustcorder-windows
           path: windows
       - name: Publish release
         env:
@@ -204,9 +215,9 @@ jobs:
           ' CHANGELOG.md > notes.md
           test -s notes.md
           gh release create "$GITHUB_REF_NAME" \
-            --title "Warcraft Recorder $version" \
+            --title "Warcraft Rustcorder $version" \
             --notes-file notes.md \
-            candidate/warcraft-recorder.flatpak \
-            candidate/warcraft-recorder.flatpak.sha256 \
-            windows/WarcraftRecorder-*-setup.exe \
+            candidate/warcraft-rustcorder.flatpak \
+            candidate/warcraft-rustcorder.flatpak.sha256 \
+            windows/WarcraftRustcorder-*-setup.exe \
             windows/latest.json

@@ -36,7 +36,7 @@ pub enum SeekMode {
 
 pub use clapper::PlayerState;
 
-/// The concrete Clapper objects used by Warcraft Recorder's player UI.
+/// The concrete Clapper objects used by Warcraft Rustcorder's player UI.
 #[derive(Clone)]
 pub struct PlayerBackend {
     video: clapper_gtk::Video,
@@ -189,7 +189,7 @@ mod queue_cap {
 
     #[glib::object_subclass]
     impl ObjectSubclass for QueueCap {
-        const NAME: &'static str = "WarcraftRecorderQueueCap";
+        const NAME: &'static str = "WarcraftRustcorderQueueCap";
         type Type = super::QueueCap;
         type ParentType = gst::Tracer;
     }

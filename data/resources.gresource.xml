@@ -1,10 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
 <gresources>
   <!-- UI GResource bundle embedded in the binary: shell CSS, product/category icons, license notices. -->
-  <gresource prefix="/io/github/JohanWes/WarcraftRecorder">
+  <gresource prefix="/io/github/JohanWes/WarcraftRustcorder">
     <file>style.css</file>
   </gresource>
-  <gresource prefix="/io/github/JohanWes/WarcraftRecorder/icons/scalable/actions">
+  <gresource prefix="/io/github/JohanWes/WarcraftRustcorder/icons/scalable/actions">
     <file alias="wr-category-2v2-symbolic.svg">assets/icons/wr-category-2v2-symbolic.svg</file>
     <file alias="wr-category-3v3-symbolic.svg">assets/icons/wr-category-3v3-symbolic.svg</file>
     <file alias="wr-category-5v5-symbolic.svg">assets/icons/wr-category-5v5-symbolic.svg</file>
@@ -16,10 +16,10 @@
     <file alias="wr-category-manual-symbolic.svg">assets/icons/wr-category-manual-symbolic.svg</file>
     <file alias="wr-category-clips-symbolic.svg">assets/icons/wr-category-clips-symbolic.svg</file>
   </gresource>
-  <gresource prefix="/io/github/JohanWes/WarcraftRecorder/icons/scalable/apps">
-    <file alias="warcraft-recorder.svg">icons/io.github.JohanWes.WarcraftRecorder.svg</file>
+  <gresource prefix="/io/github/JohanWes/WarcraftRustcorder/icons/scalable/apps">
+    <file alias="warcraft-rustcorder.svg">icons/io.github.JohanWes.WarcraftRustcorder.svg</file>
   </gresource>
-  <gresource prefix="/io/github/JohanWes/WarcraftRecorder/licenses">
+  <gresource prefix="/io/github/JohanWes/WarcraftRustcorder/licenses">
     <file alias="lucide-ISC.txt">assets/icons/LUCIDE-LICENSE</file>
     <file alias="fontawesome-CC-BY-4.0.txt">assets/icons/FONTAWESOME-LICENSE.txt</file>
   </gresource>

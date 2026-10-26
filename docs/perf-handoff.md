@@ -208,8 +208,8 @@ release-notes view does not inflate the number. Flatpak resets
 `XDG_CONFIG_HOME`, so set it inside the sandbox:
 
 ```bash
-flatpak run --command=sh io.github.JohanWes.WarcraftRecorder \
-  -c "GSK_RENDERER=... XDG_CONFIG_HOME=$HOME/.var/app/io.github.JohanWes.WarcraftRecorder/qa/config exec warcraft-recorder"
+flatpak run --command=sh io.github.JohanWes.WarcraftRustcorder \
+  -c "GSK_RENDERER=... XDG_CONFIG_HOME=$HOME/.var/app/io.github.JohanWes.WarcraftRustcorder/qa/config exec warcraft-rustcorder"
 ```
 
 The throwaway config is a copy of the real one with:
@@ -221,7 +221,7 @@ The throwaway config is a copy of the real one with:
 Delete it afterwards.
 
 For library-level timings, use a small binary crate depending on
-`warcraft-recorder = { path = ".../native" }` that calls `Storage::scan`,
+`warcraft-rustcorder = { path = ".../native" }` that calls `Storage::scan`,
 `storage::load_meter`, `SpellDb::parse`, or `parser::parse_line` +
 `ActivityEngine::handle`, and reads `VmHWM`/`VmRSS` around the call. Build
 these outside the repo.

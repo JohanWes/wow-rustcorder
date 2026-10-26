@@ -18,17 +18,19 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::{Duration, Instant};
 
-use warcraft_recorder::config::{
+use warcraft_rustcorder::config::{
     ActivitySettings, AuthorizedPath, CONFIG_FILENAME, CaptureSettings, Config, FlavorConfig,
     ManualSettings, StorageSettings,
 };
-use warcraft_recorder::coordinator::{AppSnapshot, ClipRange, Command, Coordinator, Setup, start};
-use warcraft_recorder::domain::{
+use warcraft_rustcorder::coordinator::{
+    AppSnapshot, ClipRange, Command, Coordinator, Setup, start,
+};
+use warcraft_rustcorder::domain::{
     Category, MeterFight, MeterMetric, Outcome, RecorderStatus, StorageLimit, TimelineKind,
 };
-use warcraft_recorder::media_jobs::MediaConfig;
-use warcraft_recorder::recorder::Timeouts;
-use warcraft_recorder::storage::{RECOVERY_DIR, load_meter, now_unix_ms};
+use warcraft_rustcorder::media_jobs::MediaConfig;
+use warcraft_rustcorder::recorder::Timeouts;
+use warcraft_rustcorder::storage::{RECOVERY_DIR, load_meter, now_unix_ms};
 
 const PLAYER_GUID: &str = "Player-1092-0A70E103";
 const PLAYER_NAME: &str = "Testplayer-Testrealm";
@@ -143,7 +145,7 @@ impl Harness {
         }
     }
 
-    fn entries_of(&self, category: &Category) -> Vec<&warcraft_recorder::domain::LibraryEntry> {
+    fn entries_of(&self, category: &Category) -> Vec<&warcraft_rustcorder::domain::LibraryEntry> {
         self.latest
             .entries
             .iter()
@@ -217,7 +219,7 @@ fn fixture_bin(name: &str) -> PathBuf {
 
 fn write_config(root: &Path, library: &Path, log_dir: &Path) {
     let config = Config {
-        flavors: warcraft_recorder::config::FlavorSettings {
+        flavors: warcraft_rustcorder::config::FlavorSettings {
             retail: FlavorConfig {
                 enabled: true,
                 log_dir: AuthorizedPath::authorized(log_dir),
@@ -679,11 +681,11 @@ fn dismissing_the_release_notes_ends_them_for_good() {
     assert!(harness.latest.config.last_seen_version.is_empty());
 
     harness.send(Command::DismissReleaseNotes);
-    harness.pump(|snapshot| snapshot.config.last_seen_version == warcraft_recorder::VERSION);
+    harness.pump(|snapshot| snapshot.config.last_seen_version == warcraft_rustcorder::VERSION);
     let saved = Config::load(&config_path).expect("reload the saved config");
     assert_eq!(
         saved.last_seen_version,
-        warcraft_recorder::VERSION,
+        warcraft_rustcorder::VERSION,
         "the dismissal must outlive the process"
     );
 
@@ -699,13 +701,13 @@ fn dismissing_the_release_notes_ends_them_for_good() {
     harness.pump(|snapshot| snapshot.config.capture.fps == 30);
     assert_eq!(
         harness.latest.config.last_seen_version,
-        warcraft_recorder::VERSION,
+        warcraft_rustcorder::VERSION,
         "a settings save must not resurrect the dismissal"
     );
     let saved = Config::load(&config_path).expect("reload after the settings save");
     assert_eq!(
         saved.last_seen_version,
-        warcraft_recorder::VERSION,
+        warcraft_rustcorder::VERSION,
         "the resurrected notes must not reach disk either"
     );
 }
@@ -780,7 +782,7 @@ fn missing_regular_artifact_is_reported_and_the_next_capture_saves() {
 fn canary_harness(
     name: &str,
     protected: bool,
-) -> (Harness, warcraft_recorder::domain::LibraryEntry) {
+) -> (Harness, warcraft_rustcorder::domain::LibraryEntry) {
     let (root, library, capture_root, log_file) = spawn_tree(name);
     let start = now_unix_ms() - 61_000;
     // A native sidecar, exactly as finalize would write one: the canary must
@@ -799,7 +801,7 @@ fn canary_harness(
 }
 
 /// Media plus sidecar bytes for every entry still counted by the coordinator.
-fn counted_usage(entries: &[&warcraft_recorder::domain::LibraryEntry]) -> u64 {
+fn counted_usage(entries: &[&warcraft_rustcorder::domain::LibraryEntry]) -> u64 {
     entries
         .iter()
         .flat_map(|entry| [&entry.media_path, &entry.sidecar_path])

@@ -8,14 +8,14 @@
 
 [Setup]
 AppId={{6B7E2F1A-4C3D-4E8B-9A51-2D7C0E9F3B44}
-AppName=Warcraft Recorder
+AppName=Warcraft Rustcorder
 AppVersion={#AppVersion}
-AppVerName=Warcraft Recorder {#AppVersion}
+AppVerName=Warcraft Rustcorder {#AppVersion}
 AppPublisher=JohanWes
-AppPublisherURL=https://github.com/JohanWes/wow-recorder-linuxwayland
-AppSupportURL=https://github.com/JohanWes/wow-recorder-linuxwayland/issues
+AppPublisherURL=https://github.com/JohanWes/wow-rustcorder
+AppSupportURL=https://github.com/JohanWes/wow-rustcorder/issues
 VersionInfoVersion={#AppVersion}
-DefaultDirName={localappdata}\Programs\Warcraft Recorder
+DefaultDirName={localappdata}\Programs\Warcraft Rustcorder
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
@@ -24,10 +24,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; Windows 10 2004: Windows Graphics Capture and the Media Foundation encoders.
 MinVersion=10.0.19041
 OutputDir={#OutputDir}
-OutputBaseFilename=WarcraftRecorder-{#AppVersion}-setup
-SetupIconFile=warcraft-recorder.ico
-UninstallDisplayIcon={app}\bin\warcraft-recorder.exe
-UninstallDisplayName=Warcraft Recorder
+OutputBaseFilename=WarcraftRustcorder-{#AppVersion}-setup
+SetupIconFile=warcraft-rustcorder.ico
+UninstallDisplayIcon={app}\bin\warcraft-rustcorder.exe
+UninstallDisplayName=Warcraft Rustcorder
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -47,19 +47,19 @@ Type: filesandordirs; Name: "{app}\share"
 
 [UninstallDelete]
 ; GStreamer's plugin cache. Settings, logs and recordings stay.
-Type: filesandordirs; Name: "{localappdata}\io.github.JohanWes.WarcraftRecorder"
+Type: filesandordirs; Name: "{localappdata}\io.github.JohanWes.WarcraftRustcorder"
 
 [Files]
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Warcraft Recorder"; Filename: "{app}\bin\warcraft-recorder.exe"; AppUserModelID: "io.github.JohanWes.WarcraftRecorder"
-Name: "{autodesktop}\Warcraft Recorder"; Filename: "{app}\bin\warcraft-recorder.exe"; AppUserModelID: "io.github.JohanWes.WarcraftRecorder"; Tasks: desktopicon
+Name: "{autoprograms}\Warcraft Rustcorder"; Filename: "{app}\bin\warcraft-rustcorder.exe"; AppUserModelID: "io.github.JohanWes.WarcraftRustcorder"
+Name: "{autodesktop}\Warcraft Rustcorder"; Filename: "{app}\bin\warcraft-rustcorder.exe"; AppUserModelID: "io.github.JohanWes.WarcraftRustcorder"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\bin\warcraft-recorder.exe"; Description: "Start Warcraft Recorder"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\bin\warcraft-rustcorder.exe"; Description: "Start Warcraft Rustcorder"; Flags: nowait postinstall skipifsilent
 ; In-app updates run silently; start the new version afterwards.
-Filename: "{app}\bin\warcraft-recorder.exe"; Flags: nowait; Check: WizardSilent
+Filename: "{app}\bin\warcraft-rustcorder.exe"; Flags: nowait; Check: WizardSilent
 
 [Code]
 // The uninstaller does not close running apps the way setup does: stop the

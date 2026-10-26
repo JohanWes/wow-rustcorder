@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_dir="${1:-}"
-app_id="${2:-io.github.JohanWes.WarcraftRecorder}"
+app_id="${2:-io.github.JohanWes.WarcraftRustcorder}"
 second_repo="${3:-}"
 
 if [[ -z "$repo_dir" ]]; then

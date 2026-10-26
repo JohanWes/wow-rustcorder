@@ -8,8 +8,8 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 
-use warcraft_recorder::coordinator::AppSnapshot;
-use warcraft_recorder::domain::Category;
+use warcraft_rustcorder::coordinator::AppSnapshot;
+use warcraft_rustcorder::domain::Category;
 
 use super::status::StatusCard;
 use super::{ActionSink, CATEGORIES, ShellAction, icon_button};
@@ -68,10 +68,10 @@ impl Sidebar {
     pub fn new(sink: ActionSink) -> Self {
         let widget = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
 
-        let mark = gtk4::Image::from_icon_name("warcraft-recorder");
+        let mark = gtk4::Image::from_icon_name("warcraft-rustcorder");
         mark.set_pixel_size(32);
         mark.set_valign(gtk4::Align::Center);
-        let name = gtk4::Label::new(Some("Warcraft Recorder"));
+        let name = gtk4::Label::new(Some("Warcraft Rustcorder"));
         name.add_css_class("title-3");
         name.set_xalign(0.0);
         let brand = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
@@ -142,7 +142,7 @@ impl Sidebar {
                     return;
                 }
                 sink(ShellAction::Command(
-                    warcraft_recorder::coordinator::Command::SetSelectedCategory {
+                    warcraft_rustcorder::coordinator::Command::SetSelectedCategory {
                         category: category.clone(),
                     },
                 ));
@@ -247,8 +247,8 @@ impl Sidebar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use warcraft_recorder::config::Config;
-    use warcraft_recorder::domain::RecorderStatus;
+    use warcraft_rustcorder::config::Config;
+    use warcraft_rustcorder::domain::RecorderStatus;
 
     fn snapshot(counts: Vec<(Category, usize)>, hide_empty: bool, manual: bool) -> AppSnapshot {
         let mut config = Config::default();

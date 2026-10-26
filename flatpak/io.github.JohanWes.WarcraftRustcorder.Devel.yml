@@ -1,10 +1,10 @@
-app-id: io.github.JohanWes.WarcraftRecorder.Devel
+app-id: io.github.JohanWes.WarcraftRustcorder.Devel
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-command: warcraft-recorder
+command: warcraft-rustcorder
 separate-locales: false
 
 finish-args:
@@ -33,23 +33,23 @@ modules:
 
   - modules/clapper.yml
 
-  - name: warcraft-recorder
+  - name: warcraft-rustcorder
     buildsystem: simple
     build-options:
       append-path: /usr/lib/sdk/rust-stable/bin
       env:
-        CARGO_HOME: /run/build/warcraft-recorder/cargo
+        CARGO_HOME: /run/build/warcraft-rustcorder/cargo
         CARGO_PROFILE_RELEASE_LTO: fat
         CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
     build-commands:
       - cargo --offline build --manifest-path native/Cargo.toml --release --features development
-      - install -Dm755 native/target/release/warcraft-recorder /app/bin/warcraft-recorder
-      - install -d /app/share/warcraft-recorder
-      - glib-compile-resources --sourcedir=data --target=/app/share/warcraft-recorder/spells.gresource data/spells.gresource.xml
-      - install -Dm644 data/io.github.JohanWes.WarcraftRecorder.Devel.desktop /app/share/applications/io.github.JohanWes.WarcraftRecorder.Devel.desktop
-      - install -Dm644 data/io.github.JohanWes.WarcraftRecorder.Devel.metainfo.xml /app/share/metainfo/io.github.JohanWes.WarcraftRecorder.Devel.metainfo.xml
-      - install -Dm644 data/icons/io.github.JohanWes.WarcraftRecorder.Devel.svg /app/share/icons/hicolor/scalable/apps/io.github.JohanWes.WarcraftRecorder.Devel.svg
-      - install -Dm644 data/io.github.JohanWes.WarcraftRecorder.Devel.gschema.xml /app/share/glib-2.0/schemas/io.github.JohanWes.WarcraftRecorder.Devel.gschema.xml
+      - install -Dm755 native/target/release/warcraft-rustcorder /app/bin/warcraft-rustcorder
+      - install -d /app/share/warcraft-rustcorder
+      - glib-compile-resources --sourcedir=data --target=/app/share/warcraft-rustcorder/spells.gresource data/spells.gresource.xml
+      - install -Dm644 data/io.github.JohanWes.WarcraftRustcorder.Devel.desktop /app/share/applications/io.github.JohanWes.WarcraftRustcorder.Devel.desktop
+      - install -Dm644 data/io.github.JohanWes.WarcraftRustcorder.Devel.metainfo.xml /app/share/metainfo/io.github.JohanWes.WarcraftRustcorder.Devel.metainfo.xml
+      - install -Dm644 data/icons/io.github.JohanWes.WarcraftRustcorder.Devel.svg /app/share/icons/hicolor/scalable/apps/io.github.JohanWes.WarcraftRustcorder.Devel.svg
+      - install -Dm644 data/io.github.JohanWes.WarcraftRustcorder.Devel.gschema.xml /app/share/glib-2.0/schemas/io.github.JohanWes.WarcraftRustcorder.Devel.gschema.xml
       - glib-compile-schemas /app/share/glib-2.0/schemas
     sources:
       - type: dir

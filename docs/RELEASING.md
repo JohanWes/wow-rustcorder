@@ -1,13 +1,13 @@
 # Releasing
 
 Flatpak is the only native release format. The stable application ID is
-`io.github.JohanWes.WarcraftRecorder`; the permanent signed remote is
-`https://johanwes.github.io/wow-recorder-linuxwayland/`.
+`io.github.JohanWes.WarcraftRustcorder`; the permanent signed remote is
+`https://johanwes.github.io/wow-rustcorder/`.
 
 ## Candidate build
 
 1. Update `native/Cargo.toml` and the first `<release version="...">` in
-   `data/io.github.JohanWes.WarcraftRecorder.metainfo.xml` to the same version.
+   `data/io.github.JohanWes.WarcraftRustcorder.metainfo.xml` to the same version.
 2. Run `bash scripts/generate-release-notes.sh <version>` as the last thing
    before the release commit. It prepends the commit subjects since the
    previous tag to `data/release-notes.md`, which is compiled into the binary
@@ -46,15 +46,38 @@ together. Verify with only the public key:
 
 ```sh
 gpg --import public-release-key.asc
-flatpak remote-add --user --if-not-exists warcraft-recorder \
-  https://johanwes.github.io/wow-recorder-linuxwayland/index.flatpakrepo
-flatpak install --user warcraft-recorder io.github.JohanWes.WarcraftRecorder
-flatpak remote-info --user --show-commit warcraft-recorder \
-  io.github.JohanWes.WarcraftRecorder
+flatpak remote-add --user --if-not-exists warcraft-rustcorder \
+  https://johanwes.github.io/wow-rustcorder/index.flatpakrepo
+flatpak install --user warcraft-rustcorder io.github.JohanWes.WarcraftRustcorder
+flatpak remote-info --user --show-commit warcraft-rustcorder \
+  io.github.JohanWes.WarcraftRustcorder
 ```
 
 If the signing key is lost, users must remove and re-add the remote with a new
 public key. There is no rotation framework or staging remote.
+
+## The rename from Warcraft Recorder
+
+The app was `io.github.JohanWes.WarcraftRecorder`, served from
+`https://johanwes.github.io/wow-recorder-linuxwayland/`. Every release repo
+also carries the old ID marked end-of-life with a rebase to the new one, so a
+plain `flatpak update` moves old installs over. Flatpak moves
+`~/.var/app/<old id>` on the first start and the app moves its config folder
+(`config::migrate_old_config`). Folders granted through the file chooser belong
+to the old ID, so the app asks for them again.
+
+One-time steps for the first release after the rename:
+
+1. Rename the GitHub repository to `wow-rustcorder`. Pages then serves the
+   existing `gh-pages` at the new URL, and the old URL stops working.
+2. Tag and publish the release as usual, to the new URL.
+3. Keep the old URL alive: create the repository `JohanWes/johanwes.github.io`
+   with Pages enabled, and put the release artifact's `redirect-repo/`
+   contents in its `wow-recorder-linuxwayland/` folder. It is a signed,
+   empty repository whose summary redirects old remotes to the new URL. Keep
+   it as long as old installs may still update.
+4. Check with an old install: `flatpak update --user` should report the
+   end-of-life rebase and install `io.github.JohanWes.WarcraftRustcorder`.
 
 ## Install, update, rollback, uninstall
 
@@ -62,23 +85,23 @@ For a stable install, add the permanent remote and install the application as
 shown above. Update with `flatpak update --user`. For candidate testing use:
 
 ```sh
-flatpak install --user ./warcraft-recorder.flatpak
+flatpak install --user ./warcraft-rustcorder.flatpak
 ```
 
 To roll back to the previous signed deployment, inspect the remote log and
 deploy its previous commit:
 
 ```sh
-flatpak remote-info --user --log warcraft-recorder \
-  io.github.JohanWes.WarcraftRecorder
+flatpak remote-info --user --log warcraft-rustcorder \
+  io.github.JohanWes.WarcraftRustcorder
 flatpak update --user --commit=<previous-commit> \
-  io.github.JohanWes.WarcraftRecorder
+  io.github.JohanWes.WarcraftRustcorder
 ```
 
 Uninstalling the app does not delete recordings:
 
 ```sh
-flatpak uninstall --user io.github.JohanWes.WarcraftRecorder
+flatpak uninstall --user io.github.JohanWes.WarcraftRustcorder
 ```
 
 Use `--delete-data` only when deleting the native app's private data is
@@ -86,13 +109,13 @@ intentional.
 
 ## Windows
 
-The tag job also builds `WarcraftRecorder-<version>-setup.exe` (Inno Setup,
+The tag job also builds `WarcraftRustcorder-<version>-setup.exe` (Inno Setup,
 per-user, no admin) and `latest.json` on a Windows runner with
 `windows/build.sh`, and attaches both to the GitHub release. The installer is
 not code-signed yet, so SmartScreen warns on first run.
 
 Installed apps check
-`https://johanwes.github.io/wow-recorder-linuxwayland/windows/latest.json` at
+`https://johanwes.github.io/wow-rustcorder/windows/latest.json` at
 startup and from "Check for updates", then download the installer, verify its
 SHA-256, and run it silently. As with the Flatpak repo, nothing reaches users
 until that file lands: copy the release's `latest.json` to `windows/` on the

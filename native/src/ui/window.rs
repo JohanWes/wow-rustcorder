@@ -13,10 +13,10 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 
-use warcraft_recorder::coordinator::{AppSnapshot, Command, CoordinatorHandle};
-use warcraft_recorder::domain::{Category, RecoveryAction};
+use warcraft_rustcorder::coordinator::{AppSnapshot, Command, CoordinatorHandle};
+use warcraft_rustcorder::domain::{Category, RecoveryAction};
 
-use warcraft_recorder::domain::RecorderStatus;
+use warcraft_rustcorder::domain::RecorderStatus;
 
 use super::library::{Library, Selection};
 use super::operational_actions::{
@@ -194,7 +194,7 @@ impl Shell {
     ) -> Self {
         let window = adw::ApplicationWindow::builder()
             .application(application)
-            .title("Warcraft Recorder")
+            .title("Warcraft Rustcorder")
             .default_width(1440)
             .default_height(900)
             .width_request(640)
@@ -246,7 +246,7 @@ impl Shell {
         let sidebar = Sidebar::new(Rc::clone(&sink));
 
         // Content header: category title and the one primary menu.
-        let title = adw::WindowTitle::new("Warcraft Recorder", "");
+        let title = adw::WindowTitle::new("Warcraft Rustcorder", "");
         let menu_button = gtk4::MenuButton::new();
         menu_button.set_icon_name("open-menu-symbolic");
         menu_button.set_menu_model(Some(&primary_menu()));
@@ -403,7 +403,7 @@ impl Shell {
         toolbar_view.add_top_bar(&header);
         toasts.set_child(Some(&content_body));
         toolbar_view.set_content(Some(&toasts));
-        let nav_page = adw::NavigationPage::new(&toolbar_view, "Warcraft Recorder");
+        let nav_page = adw::NavigationPage::new(&toolbar_view, "Warcraft Rustcorder");
 
         let sidebar_page = adw::NavigationPage::new(&sidebar.widget, "Categories");
         let split = adw::NavigationSplitView::new();
@@ -550,10 +550,10 @@ impl Shell {
 
         // Last, so a notice lands over a window that already shows the real
         // state behind it.
-        if snapshot.config.last_seen_version != warcraft_recorder::VERSION
+        if snapshot.config.last_seen_version != warcraft_rustcorder::VERSION
             && !self.release_notes_shown.replace(true)
         {
-            let notes = release_notes(warcraft_recorder::VERSION);
+            let notes = release_notes(warcraft_rustcorder::VERSION);
             if notes.is_empty() {
                 // A build with no recorded commits: acknowledge it silently so
                 // the check stops firing on every snapshot.
@@ -763,12 +763,12 @@ fn open_settings(
 
 fn present_about(parent: &impl IsA<gtk4::Widget>, application: &adw::Application) {
     let about = adw::AboutDialog::new();
-    about.set_application_name("Warcraft Recorder");
+    about.set_application_name("Warcraft Rustcorder");
     about.set_application_icon(
         application
             .application_id()
             .as_deref()
-            .unwrap_or("warcraft-recorder"),
+            .unwrap_or("warcraft-rustcorder"),
     );
     about.set_developer_name("JohanWes");
     about.set_version(env!("CARGO_PKG_VERSION"));
@@ -779,8 +779,8 @@ fn present_about(parent: &impl IsA<gtk4::Widget>, application: &adw::Application
          Fonticons, Inc. (CC BY 4.0). Full notices are bundled with the \
          application.",
     );
-    about.set_website("https://github.com/JohanWes/wow-recorder-linuxwayland");
-    about.set_issue_url("https://github.com/JohanWes/wow-recorder-linuxwayland/issues");
+    about.set_website("https://github.com/JohanWes/wow-rustcorder");
+    about.set_issue_url("https://github.com/JohanWes/wow-rustcorder/issues");
     about.present(Some(parent));
 }
 
@@ -816,8 +816,8 @@ pub(crate) mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    use warcraft_recorder::config::Config;
-    use warcraft_recorder::domain::{
+    use warcraft_rustcorder::config::Config;
+    use warcraft_rustcorder::domain::{
         ActivityDetails, Category, Codec, CorrelatedActivity, GameFlavor, LibraryEntry, MediaFacts,
         Outcome, RecorderStatus, RecordingId,
     };

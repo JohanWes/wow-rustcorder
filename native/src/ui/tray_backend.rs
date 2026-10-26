@@ -10,7 +10,7 @@ use ksni::menu::StandardItem;
 /// rather than a theme icon name, so the panel always shows the icon this
 /// build ships instead of whatever an installed Flatpak exported.
 const ICON_RESOURCE: &str =
-    "/io/github/JohanWes/WarcraftRecorder/icons/scalable/apps/warcraft-recorder.svg";
+    "/io/github/JohanWes/WarcraftRustcorder/icons/scalable/apps/warcraft-rustcorder.svg";
 const ICON_SIZES: [i32; 6] = [16, 22, 24, 32, 48, 64];
 
 /// The only event carried over the bounded channel is Open; it is idempotent
@@ -50,7 +50,7 @@ impl TrayBackend {
             available: Arc::clone(&available),
             quit_requested: Arc::clone(&quit_requested),
             wake,
-            title: "Warcraft Recorder".into(),
+            title: "Warcraft Rustcorder".into(),
             icons: tray_icons(),
         };
 
@@ -138,7 +138,7 @@ fn tray_icons() -> Vec<ksni::Icon> {
 
 impl ksni::Tray for RecorderTray {
     fn id(&self) -> String {
-        "warcraft-recorder".into()
+        "warcraft-rustcorder".into()
     }
 
     fn title(&self) -> String {

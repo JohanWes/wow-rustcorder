@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 <component type="desktop-application">
-  <id>io.github.JohanWes.WarcraftRecorder</id>
+  <id>io.github.JohanWes.WarcraftRustcorder</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>Warcraft Recorder</name>
+  <name>Warcraft Rustcorder</name>
   <summary>Automatically record and review World of Warcraft gameplay</summary>
   <description>
     <p>
-      Warcraft Recorder captures World of Warcraft activities and keeps a local
+      Warcraft Rustcorder captures World of Warcraft activities and keeps a local
       library for video review with combat-log metadata.
     </p>
     <p>
@@ -16,17 +16,20 @@
       signed Flatpak remote. Recordings and configuration remain local.
     </p>
   </description>
-  <launchable type="desktop-id">io.github.JohanWes.WarcraftRecorder.desktop</launchable>
-  <url type="homepage">https://github.com/JohanWes/wow-recorder-linuxwayland</url>
-  <url type="bugtracker">https://github.com/JohanWes/wow-recorder-linuxwayland/issues</url>
+  <launchable type="desktop-id">io.github.JohanWes.WarcraftRustcorder.desktop</launchable>
+  <replaces>
+    <id>io.github.JohanWes.WarcraftRecorder</id>
+  </replaces>
+  <url type="homepage">https://github.com/JohanWes/wow-rustcorder</url>
+  <url type="bugtracker">https://github.com/JohanWes/wow-rustcorder/issues</url>
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/JohanWes/wow-recorder-linuxwayland/main/data/screenshots/warcraft-recorder-library.png</image>
+      <image>https://raw.githubusercontent.com/JohanWes/wow-rustcorder/main/data/screenshots/warcraft-rustcorder-library.png</image>
       <caption>Recording library and player with a combat timeline.</caption>
     </screenshot>
   </screenshots>
   <developer id="io.github.johanwes">
-    <name>Warcraft Recorder contributors</name>
+    <name>Warcraft Rustcorder contributors</name>
   </developer>
   <categories>
     <category>AudioVideo</category>

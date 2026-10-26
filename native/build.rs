@@ -31,7 +31,7 @@ fn main() {
     // The product mark, embedded as the sidebar logo.
     println!(
         "cargo:rerun-if-changed={}",
-        data.join("icons/io.github.JohanWes.WarcraftRecorder.svg")
+        data.join("icons/io.github.JohanWes.WarcraftRustcorder.svg")
             .display()
     );
     // The spell database: the JSON plus every bundled spell icon.
@@ -54,7 +54,7 @@ fn main() {
         &data,
         &style_dir,
         &data.join("resources.gresource.xml"),
-        &out_dir.join("warcraft-recorder.gresource"),
+        &out_dir.join("warcraft-rustcorder.gresource"),
     );
     compile(
         &data,
@@ -66,7 +66,7 @@ fn main() {
 
 /// Embeds the icon and version details Windows shows for the exe.
 fn windows_resources(manifest_dir: &Path, out_dir: &Path) {
-    let icon = manifest_dir.join("../windows/warcraft-recorder.ico");
+    let icon = manifest_dir.join("../windows/warcraft-rustcorder.ico");
     println!("cargo:rerun-if-changed={}", icon.display());
     let version = std::env::var("CARGO_PKG_VERSION").expect("package version");
     let numbers = version.replace('.', ",");
@@ -83,11 +83,11 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "FileDescription", "Warcraft Recorder"
-      VALUE "ProductName", "Warcraft Recorder"
+      VALUE "FileDescription", "Warcraft Rustcorder"
+      VALUE "ProductName", "Warcraft Rustcorder"
       VALUE "FileVersion", "{version}"
       VALUE "ProductVersion", "{version}"
-      VALUE "OriginalFilename", "warcraft-recorder.exe"
+      VALUE "OriginalFilename", "warcraft-rustcorder.exe"
     END
   END
   BLOCK "VarFileInfo"

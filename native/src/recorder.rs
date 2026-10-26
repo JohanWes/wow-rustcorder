@@ -461,7 +461,7 @@ impl Recorder {
         if !managed.exists() {
             fs::write(
                 &managed,
-                "This folder is managed by Warcraft Recorder, files in it may be automatically created, modified or deleted.",
+                "This folder is managed by Warcraft Rustcorder, files in it may be automatically created, modified or deleted.",
             )?;
         }
 

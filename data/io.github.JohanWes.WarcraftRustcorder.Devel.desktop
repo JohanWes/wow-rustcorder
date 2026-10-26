@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: CC0-1.0
 [Desktop Entry]
 Type=Application
-Name=Warcraft Recorder
+Name=Warcraft Rustcorder (Development)
 Comment=Automatically record and review World of Warcraft gameplay
-Exec=warcraft-recorder
-Icon=io.github.JohanWes.WarcraftRecorder
+Exec=warcraft-rustcorder
+Icon=io.github.JohanWes.WarcraftRustcorder.Devel
 Terminal=false
 Categories=AudioVideo;Video;
 StartupNotify=true
-StartupWMClass=io.github.JohanWes.WarcraftRecorder
+StartupWMClass=io.github.JohanWes.WarcraftRustcorder.Devel

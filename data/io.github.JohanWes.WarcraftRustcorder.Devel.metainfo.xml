@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 <component type="desktop-application">
-  <id>io.github.JohanWes.WarcraftRecorder.Devel</id>
+  <id>io.github.JohanWes.WarcraftRustcorder.Devel</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>Warcraft Recorder (Development)</name>
+  <name>Warcraft Rustcorder (Development)</name>
   <summary>Automatically record and review World of Warcraft gameplay</summary>
   <description>
     <p>
-      Warcraft Recorder captures World of Warcraft activities and keeps a local
+      Warcraft Rustcorder captures World of Warcraft activities and keeps a local
       library for video review with combat-log metadata.
     </p>
     <p>This development build is for testing the native Linux rewrite.</p>
   </description>
-  <launchable type="desktop-id">io.github.JohanWes.WarcraftRecorder.Devel.desktop</launchable>
-  <url type="homepage">https://github.com/JohanWes/wow-recorder-linuxwayland</url>
-  <url type="bugtracker">https://github.com/JohanWes/wow-recorder-linuxwayland/issues</url>
+  <launchable type="desktop-id">io.github.JohanWes.WarcraftRustcorder.Devel.desktop</launchable>
+  <url type="homepage">https://github.com/JohanWes/wow-rustcorder</url>
+  <url type="bugtracker">https://github.com/JohanWes/wow-rustcorder/issues</url>
   <developer id="io.github.johanwes">
-    <name>Warcraft Recorder contributors</name>
+    <name>Warcraft Rustcorder contributors</name>
   </developer>
   <categories>
     <category>AudioVideo</category>

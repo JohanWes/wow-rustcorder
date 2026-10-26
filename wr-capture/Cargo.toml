@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 publish = false
-description = "Windows replay-buffer recorder driven by Warcraft Recorder"
+description = "Windows replay-buffer recorder driven by Warcraft Rustcorder"
 
 [dependencies]
 serde_json = "1.0.150"

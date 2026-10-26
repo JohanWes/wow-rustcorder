@@ -1,11 +1,11 @@
-# <img src="data/icons/io.github.JohanWes.WarcraftRecorder.svg" width="44" alt=""> Warcraft Recorder
+# <img src="data/icons/io.github.JohanWes.WarcraftRustcorder.svg" width="44" alt=""> Warcraft Rustcorder
 
-Warcraft Recorder records World of Warcraft on Linux. It reads the combat log,
+Warcraft Rustcorder records World of Warcraft on Linux. It reads the combat log,
 detects each activity and saves a video with a metadata file beside it. It is a
 native Rust and GTK4 application, distributed as a Flatpak for Wayland
 sessions.
 
-![Intro: a recorded raid kill, the recording library, the combat meter with target filter and death recap, and the app's footprint](data/screenshots/warcraft-recorder-intro.avif)
+![Intro: a recorded raid kill, the recording library, the combat meter with target filter and death recap, and the app's footprint](data/screenshots/warcraft-rustcorder-intro.avif)
 
 ## Features
 
@@ -31,7 +31,7 @@ sessions.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/JohanWes/wow-recorder-linuxwayland/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/JohanWes/wow-rustcorder/main/install.sh | bash
 ```
 
 The installer adds the project's signed Flatpak remote, installs the app and
@@ -43,9 +43,9 @@ session, a missing screen-capture portal or PipeWire not running.
 Or add the remote and install directly:
 
 ```sh
-flatpak remote-add --user --if-not-exists warcraft-recorder \
-  https://johanwes.github.io/wow-recorder-linuxwayland/index.flatpakrepo
-flatpak install --user warcraft-recorder io.github.JohanWes.WarcraftRecorder
+flatpak remote-add --user --if-not-exists warcraft-rustcorder \
+  https://johanwes.github.io/wow-rustcorder/index.flatpakrepo
+flatpak install --user warcraft-rustcorder io.github.JohanWes.WarcraftRustcorder
 ```
 
 Requirements:
@@ -61,8 +61,8 @@ Flatpak.
 
 ### Windows
 
-Download `WarcraftRecorder-<version>-setup.exe` from the
-[latest release](https://github.com/JohanWes/wow-recorder-linuxwayland/releases/latest)
+Download `WarcraftRustcorder-<version>-setup.exe` from the
+[latest release](https://github.com/JohanWes/wow-rustcorder/releases/latest)
 and run it. It installs for your user only, without admin rights, and needs
 Windows 10 (version 2004) or later. The installer is not code-signed, so
 SmartScreen may ask you to choose **More info** and then **Run anyway**. The app
@@ -109,13 +109,17 @@ the GPU through `gpu-screen-recorder`.
 Re-run the installer, or:
 
 ```sh
-flatpak update --user io.github.JohanWes.WarcraftRecorder
+flatpak update --user io.github.JohanWes.WarcraftRustcorder
 ```
+
+The app used to be called Warcraft Recorder. An install from before the rename
+moves over on its next update, settings included. Choose the combat-log and
+recording folders again in Settings afterwards.
 
 To uninstall:
 
 ```sh
-flatpak uninstall --user io.github.JohanWes.WarcraftRecorder
+flatpak uninstall --user io.github.JohanWes.WarcraftRustcorder
 ```
 
 Recordings are ordinary video and JSON files in your recording folder. An

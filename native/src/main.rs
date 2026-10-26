@@ -13,8 +13,8 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, mpsc};
 
-use warcraft_recorder::config::Config;
-use warcraft_recorder::coordinator;
+use warcraft_rustcorder::config::Config;
+use warcraft_rustcorder::coordinator;
 
 #[cfg(windows)]
 mod clapper_stubs;
@@ -23,9 +23,9 @@ mod ui;
 use ui::tray_backend::TrayBackend;
 
 #[cfg(not(feature = "development"))]
-const APP_ID: &str = warcraft_recorder::config::APP_ID;
+const APP_ID: &str = warcraft_rustcorder::config::APP_ID;
 #[cfg(feature = "development")]
-const APP_ID: &str = "io.github.JohanWes.WarcraftRecorder.Devel";
+const APP_ID: &str = "io.github.JohanWes.WarcraftRustcorder.Devel";
 
 fn main() {
     #[cfg(windows)]
@@ -38,7 +38,7 @@ fn main() {
         Err(error) => {
             tracing_subscriber::fmt::init();
             tracing::error!(%error, "cannot resolve the configuration directory");
-            eprintln!("warcraft-recorder: {error}");
+            eprintln!("warcraft-rustcorder: {error}");
             std::process::exit(1);
         }
     };
@@ -53,7 +53,7 @@ fn main() {
             std::process::exit(ui::run_remote(application));
         }
         Err(error) => {
-            eprintln!("warcraft-recorder: cannot register the application: {error}");
+            eprintln!("warcraft-rustcorder: cannot register the application: {error}");
             std::process::exit(1);
         }
     };
@@ -170,7 +170,7 @@ fn isolate_gstreamer() {
     let registry = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.clone())
-        .join(warcraft_recorder::config::APP_ID)
+        .join(warcraft_rustcorder::config::APP_ID)
         .join(format!("gstreamer-registry-{:016x}.bin", gpu_fingerprint()));
     let scanner = root.join("libexec/gstreamer-1.0/gst-plugin-scanner.exe");
     // Clapper's own Windows lookup resolves relative to lib/gstreamer-1.0.

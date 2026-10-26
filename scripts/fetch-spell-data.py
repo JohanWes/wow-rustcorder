@@ -36,10 +36,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPELLS_DIR = os.path.join(ROOT, "data", "spells")
 ICON_DIR = os.path.join(SPELLS_DIR, "icons")
 GREL = os.path.join(ROOT, "data", "spells.gresource.xml")
-SPELLS_PREFIX = "/io/github/JohanWes/WarcraftRecorder/spells"
+SPELLS_PREFIX = "/io/github/JohanWes/WarcraftRustcorder/spells"
 CACHE = os.environ.get("SPELLDB_CACHE", os.path.join(ROOT, "scripts", ".cache-spelldb"))
 
-UA = {"User-Agent": "warcraft-recorder-spelldb/1.0 (spell database builder)"}
+UA = {"User-Agent": "warcraft-rustcorder-spelldb/1.0 (spell database builder)"}
 WORKERS = 48
 ICON_SIZE = 24
 ICON_COLORS = 64

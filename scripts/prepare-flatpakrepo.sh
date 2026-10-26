@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_dir="${1:-}"
-remote_url="${2:-https://johanwes.github.io/wow-recorder-linuxwayland/}"
+remote_url="${2:-https://johanwes.github.io/wow-rustcorder/}"
 key_id="${FLATPAK_GPG_KEY_ID:-}"
 
 if [[ -z "$repo_dir" || -z "$key_id" ]]; then
@@ -21,7 +21,7 @@ flatpak build-update-repo \
   "$repo_dir"
 
 public_key=$(gpg --export "$key_id" | base64 -w0)
-template="$(dirname "$0")/../flatpak/io.github.JohanWes.WarcraftRecorder.flatpakrepo.in"
+template="$(dirname "$0")/../flatpak/io.github.JohanWes.WarcraftRustcorder.flatpakrepo.in"
 sed \
   -e "s|^Url=.*$|Url=${remote_url%/}/|" \
   -e "s|@FLATPAK_GPG_KEY_BASE64@|${public_key}|" \
