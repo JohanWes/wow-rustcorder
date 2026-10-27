@@ -6,6 +6,10 @@ it. It is a native Rust and GTK4 application, distributed as a Flatpak for
 Wayland sessions and as a Windows installer
 ([download](https://github.com/JohanWes/wow-rustcorder/releases/latest)).
 
+It started out inspired by [Warcraft Recorder](https://github.com/aza547/wow-recorder)
+and has since grown into its own project: written entirely in Rust, with a
+focus on low CPU, memory and disk use while you play.
+
 ![Intro: a recorded raid kill, the recording library, the combat meter with target filter and death recap, and the app's footprint](data/screenshots/warcraft-rustcorder-intro.avif)
 
 ## Features
