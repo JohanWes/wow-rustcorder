@@ -1,6 +1,7 @@
 # Releasing
 
-Flatpak is the only native release format. The stable application ID is
+Linux releases ship as a Flatpak; Windows releases as an installer (see
+[Windows](#windows)). The stable application ID is
 `io.github.JohanWes.WarcraftRustcorder`; the permanent signed remote is
 `https://johanwes.github.io/wow-rustcorder/`.
 

@@ -1,9 +1,10 @@
 # <img src="data/icons/io.github.JohanWes.WarcraftRustcorder.svg" width="44" alt=""> Warcraft Rustcorder
 
-Warcraft Rustcorder records World of Warcraft on Linux. It reads the combat log,
-detects each activity and saves a video with a metadata file beside it. It is a
-native Rust and GTK4 application, distributed as a Flatpak for Wayland
-sessions.
+Warcraft Rustcorder records World of Warcraft on Linux and Windows. It reads the
+combat log, detects each activity and saves a video with a metadata file beside
+it. It is a native Rust and GTK4 application, distributed as a Flatpak for
+Wayland sessions and as a Windows installer
+([download](https://github.com/JohanWes/wow-rustcorder/releases/latest)).
 
 ![Intro: a recorded raid kill, the recording library, the combat meter with target filter and death recap, and the app's footprint](data/screenshots/warcraft-rustcorder-intro.avif)
 

@@ -214,6 +214,12 @@ jobs:
             found { print }
           ' CHANGELOG.md > notes.md
           test -s notes.md
+          {
+            printf -- '- **Windows:** download `WarcraftRustcorder-%s-setup.exe` below and run it.\n' "$version"
+            printf -- '- **Linux:** install the Flatpak as described in the [README](https://github.com/JohanWes/wow-rustcorder#install).\n\n'
+            cat notes.md
+          } > notes-full.md
+          mv notes-full.md notes.md
           gh release create "$GITHUB_REF_NAME" \
             --title "Warcraft Rustcorder $version" \
             --notes-file notes.md \
