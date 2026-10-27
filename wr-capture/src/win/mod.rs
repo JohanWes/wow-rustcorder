@@ -23,6 +23,8 @@ use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
 };
 
+pub use audio::list_devices as list_audio_devices;
+
 use crate::Options;
 use crate::packet::Packet;
 use crate::router::Router;

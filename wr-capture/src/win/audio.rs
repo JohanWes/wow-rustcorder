@@ -15,16 +15,18 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
+use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Media::Audio::*;
 use windows::Win32::Media::Multimedia::WAVE_FORMAT_IEEE_FLOAT;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{
-    BLOB, CLSCTX_ALL, CoCreateInstance, CoTaskMemFree, IAgileObject, IAgileObject_Impl,
+    BLOB, CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
+    IAgileObject, IAgileObject_Impl, STGM_READ,
 };
 use windows::Win32::System::Threading::CreateEventW;
 use windows::Win32::System::Variant::VT_BLOB;
-use windows::core::{HRESULT, IUnknown, Interface, Ref, implement};
+use windows::core::{HRESULT, HSTRING, IUnknown, Interface, Ref, implement};
 
 use super::encoder::{AUDIO_RATE, Encoder};
 use super::{Message, Shared, clock_origin, fail, now_100ns};
@@ -47,7 +49,7 @@ pub fn run(options: &Options, shared: &Shared, sender: Sender<Message>) -> Resul
     let mut sources = options.audio.clone();
     if sources.contains(&AudioSource::App) && windows_build() < PROCESS_LOOPBACK_BUILD {
         eprintln!("this Windows cannot capture one app's audio; recording desktop audio");
-        sources.retain(|&source| source != AudioSource::App);
+        sources.retain(|source| *source != AudioSource::App);
         if !sources.contains(&AudioSource::DefaultOutput) {
             sources.insert(0, AudioSource::DefaultOutput);
         }
@@ -158,11 +160,12 @@ impl Track {
         }
         if self.client.is_none() && Instant::now() >= self.retry_at {
             self.retry_at = Instant::now() + RETRY;
-            let opened = match self.source {
+            let opened = match &self.source {
                 AudioSource::App if self.pid == 0 => return,
                 AudioSource::App => Client::process(self.pid, origin),
-                AudioSource::DefaultOutput => Client::default(eRender, true, origin),
-                AudioSource::DefaultInput => Client::default(eCapture, false, origin),
+                AudioSource::DefaultOutput => Client::default(eRender, origin),
+                AudioSource::DefaultInput => Client::default(eCapture, origin),
+                AudioSource::Device(id) => Client::device(id, origin),
             };
             match opened {
                 Ok(client) => {
@@ -258,31 +261,39 @@ impl Drop for Client {
 }
 
 impl Client {
-    fn default(flow: EDataFlow, loopback: bool, origin: i64) -> Result<Self, String> {
-        let audio: IAudioClient = unsafe {
-            let enumerator: IMMDeviceEnumerator =
-                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-                    .map_err(fail("list audio devices"))?;
-            let device = enumerator
-                .GetDefaultAudioEndpoint(flow, eConsole)
-                .map_err(fail("find the default device"))?;
-            device
-                .Activate(CLSCTX_ALL, None)
-                .map_err(fail("open the device"))?
-        };
-        let mut client = Self::start(
-            audio,
-            if loopback {
-                AUDCLNT_STREAMFLAGS_LOOPBACK
-            } else {
-                0
-            },
-            None,
-            origin,
-        )?;
+    fn default(flow: EDataFlow, origin: i64) -> Result<Self, String> {
+        let device = unsafe { enumerator()?.GetDefaultAudioEndpoint(flow, eConsole) }
+            .map_err(fail("find the default device"))?;
+        let mut client = Self::open(&device, origin)?;
         client.default_flow = Some(flow);
         client.device_id = default_device_id(flow).unwrap_or_default();
         Ok(client)
+    }
+
+    fn device(id: &str, origin: i64) -> Result<Self, String> {
+        let device = unsafe { enumerator()?.GetDevice(&HSTRING::from(id)) }
+            .map_err(fail("find the device"))?;
+        Self::open(&device, origin)
+    }
+
+    /// Outputs are recorded as loopback, inputs directly.
+    fn open(device: &IMMDevice, origin: i64) -> Result<Self, String> {
+        let (audio, flow) = unsafe {
+            let flow = device
+                .cast::<IMMEndpoint>()
+                .and_then(|endpoint| endpoint.GetDataFlow())
+                .map_err(fail("open the device"))?;
+            let audio: IAudioClient = device
+                .Activate(CLSCTX_ALL, None)
+                .map_err(fail("open the device"))?;
+            (audio, flow)
+        };
+        let flags = if flow == eRender {
+            AUDCLNT_STREAMFLAGS_LOOPBACK
+        } else {
+            0
+        };
+        Self::start(audio, flags, None, origin)
     }
 
     /// Loopback of one process tree (Windows 10 2004 and later).
@@ -429,19 +440,52 @@ impl Client {
     }
 }
 
-/// The endpoint id of the current default device for `flow`.
-fn default_device_id(flow: EDataFlow) -> Option<String> {
+fn enumerator() -> Result<IMMDeviceEnumerator, String> {
+    unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
+        .map_err(fail("list audio devices"))
+}
+
+fn device_id(device: &IMMDevice) -> Option<String> {
     unsafe {
-        let enumerator: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let id = enumerator
-            .GetDefaultAudioEndpoint(flow, eConsole)
-            .ok()?
-            .GetId()
-            .ok()?;
+        let id = device.GetId().ok()?;
         let text = id.to_string().ok();
         CoTaskMemFree(Some(id.0 as *const _));
         text
+    }
+}
+
+/// The endpoint id of the current default device for `flow`.
+fn default_device_id(flow: EDataFlow) -> Option<String> {
+    let device = unsafe { enumerator().ok()?.GetDefaultAudioEndpoint(flow, eConsole) }.ok()?;
+    device_id(&device)
+}
+
+/// Print `output|<id>|<name>` and `input|<id>|<name>` for every active endpoint.
+pub fn list_devices() {
+    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    let Ok(enumerator) = enumerator() else {
+        return;
+    };
+    for (flow, kind) in [(eRender, "output"), (eCapture, "input")] {
+        let Ok(devices) = (unsafe { enumerator.EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE) })
+        else {
+            continue;
+        };
+        for index in 0..unsafe { devices.GetCount() }.unwrap_or(0) {
+            let Ok(device) = (unsafe { devices.Item(index) }) else {
+                continue;
+            };
+            let name = unsafe {
+                device
+                    .OpenPropertyStore(STGM_READ)
+                    .and_then(|store| store.GetValue(&PKEY_Device_FriendlyName))
+            }
+            .map(|value| value.to_string())
+            .unwrap_or_default();
+            if let Some(id) = device_id(&device) {
+                println!("{kind}|{id}|{name}");
+            }
+        }
     }
 }
 

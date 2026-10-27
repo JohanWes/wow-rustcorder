@@ -830,30 +830,14 @@ impl Recorder {
         }
     }
 
-    /// `gpu-screen-recorder --list-audio-devices` with the recorded 2 s
-    /// timeout; defaults are always present.
-    #[cfg(windows)]
-    pub fn audio_devices(&mut self) -> Result<AudioDevices, RecorderError> {
-        let device = |id: &str, label: &str| AudioDevice {
-            id: id.to_string(),
-            label: label.to_string(),
-        };
-        Ok(AudioDevices {
-            outputs: vec![
-                device("default_output", "Desktop audio"),
-                device("app", "Game audio only"),
-            ],
-            inputs: vec![device("default_input", "Default microphone")],
-        })
-    }
-
-    #[cfg(unix)]
+    /// `gpu-screen-recorder --list-audio-devices` (`wr-capture` on Windows)
+    /// with the recorded 2 s timeout; defaults are always present.
     pub fn audio_devices(&mut self) -> Result<AudioDevices, RecorderError> {
         let binary = self
             .config
             .as_ref()
             .map(|config| config.gsr_binary.clone())
-            .unwrap_or_else(|| PathBuf::from("gpu-screen-recorder"));
+            .unwrap_or_else(|| PathBuf::from(RECORDER_BINARY));
         let mut child = process::command(binary)
             .env_remove("MALLOC_ARENA_MAX")
             .arg("--list-audio-devices")
@@ -1127,7 +1111,6 @@ fn read_token(path: &Path) -> Option<String> {
     if token.is_empty() { None } else { Some(token) }
 }
 
-#[cfg(unix)]
 fn text_tail(text: &str) -> String {
     let start = text
         .len()
@@ -1139,7 +1122,7 @@ fn text_tail(text: &str) -> String {
 /// defaults always come first; every other source is passed to `-a` as
 /// `device:<name>` and sorted by its PulseAudio/PipeWire name: `*.monitor`
 /// sources are outputs, everything else (virtual mics included) is an input.
-#[cfg_attr(windows, allow(dead_code))]
+#[cfg(unix)]
 fn parse_audio_devices(text: &str) -> AudioDevices {
     let device = |id: &str, detail: &str| AudioDevice {
         id: id.to_string(),
@@ -1166,6 +1149,37 @@ fn parse_audio_devices(text: &str) -> AudioDevices {
         if !list.iter().any(|existing| existing.id == id) {
             list.push(device(&id, detail.trim()));
         }
+    }
+    devices
+}
+
+/// `wr-capture --list-audio-devices` prints `output|<id>|<name>` and
+/// `input|<id>|<name>`; each is passed to `-a` as `device:<id>`.
+#[cfg(windows)]
+fn parse_audio_devices(text: &str) -> AudioDevices {
+    let device = |id: &str, label: &str| AudioDevice {
+        id: id.to_string(),
+        label: label.to_string(),
+    };
+    let mut devices = AudioDevices {
+        outputs: vec![
+            device("default_output", "Desktop audio"),
+            device("app", "Game audio only"),
+        ],
+        inputs: vec![device("default_input", "Default microphone")],
+    };
+    for line in text.lines() {
+        let mut fields = line.trim().splitn(3, '|');
+        let (Some(kind), Some(id), Some(label)) = (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        let list = match kind {
+            "output" => &mut devices.outputs,
+            "input" => &mut devices.inputs,
+            _ => continue,
+        };
+        list.push(device(&format!("device:{id}"), label));
     }
     devices
 }

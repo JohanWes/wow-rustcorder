@@ -30,13 +30,15 @@ pub enum Target {
     PrimaryMonitor,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AudioSource {
     /// Audio of the captured window's process tree only.
     App,
     /// Everything on the default output device.
     DefaultOutput,
     DefaultInput,
+    /// One endpoint by its id; outputs are captured as loopback.
+    Device(String),
 }
 
 #[derive(Clone, Debug)]
@@ -55,7 +57,7 @@ pub struct Options {
 }
 
 const USAGE: &str = "usage: wr-capture -o <replay dir> -ro <regular dir> [-w Wow.exe|WowClassic.exe...|monitor] \
-[-f fps] [-q kbps] [-k h264|hevc|av1] [-r seconds] [-a app|default_output|default_input ...] \
+[-f fps] [-q kbps] [-k h264|hevc|av1] [-r seconds] [-a app|default_output|default_input|device:<id> ...] \
 [-cursor yes|no] [-s WxH] | --version | --list-audio-devices";
 
 fn parse(args: &[String]) -> Result<Options, String> {
@@ -101,6 +103,9 @@ fn parse(args: &[String]) -> Result<Options, String> {
                         "app" => AudioSource::App,
                         "default_output" => AudioSource::DefaultOutput,
                         "default_input" => AudioSource::DefaultInput,
+                        _ if source.starts_with("device:") => {
+                            AudioSource::Device(source["device:".len()..].to_string())
+                        }
                         _ => return Err(format!("-a: unknown source {source}")),
                     });
                 }
@@ -128,10 +133,11 @@ fn main() {
             println!("{}", env!("CARGO_PKG_VERSION"));
             return;
         }
+        // `output|<id>|<name>` and `input|<id>|<name>` per active endpoint;
+        // the defaults and app audio are implied.
         Some("--list-audio-devices") => {
-            println!("default_output|Desktop audio");
-            println!("app|Game audio only");
-            println!("default_input|Default microphone");
+            #[cfg(windows)]
+            win::list_audio_devices();
             return;
         }
         _ => {}
@@ -163,14 +169,21 @@ mod tests {
 
     #[test]
     fn parses_gsr_style_flags() {
-        let options = parse(&args("-w monitor -f 30 -q 8000 -k hevc -r 90 -o R -ro V -a app|default_input -cursor no -s 1921x1080")).unwrap();
+        let options = parse(&args("-w monitor -f 30 -q 8000 -k hevc -r 90 -o R -ro V -a app|default_input|device:{0.0.1.00000000}.{abc} -cursor no -s 1921x1080")).unwrap();
         assert_eq!(options.target, Target::PrimaryMonitor);
         assert_eq!(
             (options.fps, options.bitrate_kbps, options.replay_seconds),
             (30, 8000, 90)
         );
         assert_eq!(options.codec, VideoCodec::Hevc);
-        assert_eq!(options.audio, [AudioSource::App, AudioSource::DefaultInput]);
+        assert_eq!(
+            options.audio,
+            [
+                AudioSource::App,
+                AudioSource::DefaultInput,
+                AudioSource::Device("{0.0.1.00000000}.{abc}".into())
+            ]
+        );
         assert!(!options.cursor);
         assert_eq!(options.size, Some((1920, 1080)));
         assert_eq!(

@@ -1156,7 +1156,7 @@ impl Settings {
             let devices = match result {
                 Ok(devices) => {
                     group.set_description(Some(
-                        "Devices reported by gpu-screen-recorder. A selected device that is \
+                        "Devices reported by the recorder. A selected device that is \
                          unavailable stays selected until you choose another.",
                     ));
                     devices
