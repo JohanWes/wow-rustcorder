@@ -7,7 +7,15 @@ Notable changes to the native Linux/Wayland application. The format follows
 Release history before the native rewrite belongs to the upstream Electron
 project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 
-## Unreleased
+## 1.0.16 - 2026-10-28
+
+### Added
+- Windows support: a per-user installer (`WarcraftRustcorder-1.0.16-setup.exe`)
+  with in-app update checks. Recording uses `wr-capture`, a Windows replay-buffer
+  recorder that captures the WoW window with Windows Graphics Capture and
+  encodes on the GPU (H.264, HEVC, AV1). Audio can be desktop audio, the game's
+  audio only, or any listed output or input device. The app has a tray icon and
+  records Retail, Classic and PTR clients.
 
 ### Changed
 - Renamed to Warcraft Rustcorder (app ID `io.github.JohanWes.WarcraftRustcorder`,

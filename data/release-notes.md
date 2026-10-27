@@ -4,6 +4,39 @@ Commit subjects per release, written by `scripts/generate-release-notes.sh` and
 compiled into the binary: the "What's new" dialog reads the section matching the
 running version. Only `## <version>` headings and `- ` lines are parsed.
 
+## 1.0.16
+- Add wr-capture, a Windows replay-buffer recorder speaking the GSR protocol
+- Port the GTK app to Windows, driving wr-capture over stdin/stdout
+- Add AV1 recording via Matroska and a Windows 10 desktop-audio fallback
+- Add Windows installer, in-app update check, and Windows release CI job
+- Add Windows tray, window snapping, larger font, and diagnostics logging
+- Enable GPU rendering on Windows, fix tray restore, pause startup video
+- Size the replay buffer from the lead-in and drop buffer settings
+- Keep domain imports on Windows after dropping ReplayStorage
+- Capture Classic and PTR windows; log frame, usage and GPU stats
+- Check bundled DLL imports, list bundle files, drop gst-libav and cursors
+- Treat a missing Windows update manifest as no update
+- Watch an empty combat log folder until WoW creates the first log
+- Stop Apply sticking on Applying when a save is rejected or renamed
+- Read each log file's own time when checking whether WoW runs
+- Resync audio drift, follow default devices, bound replay ring, cut GPU copies
+- Minimize to the taskbar by default on Windows so Win+D restores
+- Handle Win+arrow, system menu and window placement on Windows
+- Record only the game's client area of a windowed WoW
+- Leave Ctrl, Alt and Super key combinations to the system
+- Close the running app on uninstall and remove the plugin cache
+- Release the playing recording before deleting it on Windows
+- Capture at up to twice the recording rate so frames are not skipped
+- Name wr-capture instead of gpu-screen-recorder in Windows error messages
+- Rebuild the GStreamer registry when the GPUs change so hardware decoding works
+- Tell the user to pick another codec when the GPU cannot encode it
+- Strip the Windows app binary and drop the unused librsvg pixbuf loader
+- Add Windows installation instructions to the README
+- Use lzma2/ultra64 compression to shrink the Windows installer
+- Rename the project to Warcraft Rustcorder and migrate existing Flatpak installs
+- Keep stereo on the front speakers of 5.1 and 7.1 Windows devices
+- List and record specific audio devices on Windows
+
 ## 1.0.15
 - Update README typical update size measured on the 1.0.14 release
 - Save only the replay the pre-roll needs and skip it at zero
