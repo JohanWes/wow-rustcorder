@@ -78,8 +78,8 @@ thread_local! {
     /// the drain owns `Rc`s, so the closure looks the pump up here after GLib
     /// has already hopped it onto the main thread.
     static PUMP: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
-    /// Set by SIGTERM; the pump treats it like the tray's Quit.
-    static SIGTERM: Cell<bool> = const { Cell::new(false) };
+    /// Set by `request_quit`; the pump treats it like the tray's Quit.
+    static QUIT_REQUESTED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Run the shell's drain on the main thread. Safe to call from any thread and
@@ -97,6 +97,13 @@ pub fn wake_shell(pending: &Arc<AtomicBool>) {
         pending.swap(false, Ordering::AcqRel);
         run_pump();
     });
+}
+
+/// Quit the way the tray's Quit does: the coordinator ends and saves any
+/// recording before the GTK loop exits. Call on the main thread.
+pub fn request_quit() {
+    QUIT_REQUESTED.set(true);
+    run_pump();
 }
 
 fn run_pump() {
@@ -120,8 +127,7 @@ unsafe extern "C" {
 /// Runs on the main loop, not in signal context, so it may touch the pump.
 #[cfg(unix)]
 extern "C" fn on_sigterm(_: ffi::gpointer) -> ffi::gboolean {
-    SIGTERM.set(true);
-    run_pump();
+    request_quit();
     ffi::G_SOURCE_CONTINUE
 }
 
@@ -470,7 +476,7 @@ pub fn run(
                 }
             }
             let quit_requested =
-                SIGTERM.get() || tray.as_ref().is_some_and(|tray| tray.quit_requested());
+                QUIT_REQUESTED.get() || tray.as_ref().is_some_and(|tray| tray.quit_requested());
             if quit_requested && !shutdown_sent.get() {
                 shutdown_sent.set(coordinator.borrow().send(Command::Shutdown));
             }

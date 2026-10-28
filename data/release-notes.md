@@ -37,6 +37,7 @@ running version. Only `## <version>` headings and `- ` lines are parsed.
 - Keep stereo on the front speakers of 5.1 and 7.1 Windows devices
 - List and record specific audio devices on Windows
 
+- Download Windows updates in the app and install them invisibly
 ## 1.0.15
 - Update README typical update size measured on the 1.0.14 release
 - Save only the replay the pre-roll needs and skip it at zero

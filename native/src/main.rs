@@ -100,6 +100,9 @@ fn main() {
         tray.shutdown();
     }
     coordinator.borrow_mut().shutdown();
+    // An in-app update installs now that the recorder has stopped.
+    #[cfg(windows)]
+    ui::windows_update::run_pending_installer();
     std::process::exit(code);
 }
 

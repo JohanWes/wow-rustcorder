@@ -205,11 +205,12 @@ installer() {
 # The update manifest the app reads once it is copied to GitHub Pages.
 manifest() {
     local file=WarcraftRustcorder-$version-setup.exe
-    local sum
+    local sum size
     sum=$(sha256sum "$work/$file" | cut -d' ' -f1)
-    printf '{"version":"%s","url":"%s","sha256":"%s"}\n' "$version" \
+    size=$(stat -c%s "$work/$file")
+    printf '{"version":"%s","url":"%s","sha256":"%s","size":%s}\n' "$version" \
         "https://github.com/JohanWes/wow-rustcorder/releases/download/v$version/$file" \
-        "$sum" >"$work/latest.json"
+        "$sum" "$size" >"$work/latest.json"
 }
 
 build_clapper
