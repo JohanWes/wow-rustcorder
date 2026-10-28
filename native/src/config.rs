@@ -255,7 +255,7 @@ impl Default for InterfaceSettings {
             minimize_to_tray: !cfg!(windows),
             close_to_tray: true,
             start_minimized: false,
-            theme: Theme::Dark,
+            theme: Theme::System,
             layout: LayoutSettings::default(),
         }
     }

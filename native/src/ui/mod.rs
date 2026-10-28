@@ -68,9 +68,10 @@ pub struct ShellOptions {
     pub theme: Theme,
 }
 
-/// The app's own theme setting overrides the system light/dark preference.
+/// Applies the theme setting; `System` follows the desktop's preference.
 pub fn apply_theme(theme: Theme) {
     adw::StyleManager::default().set_color_scheme(match theme {
+        Theme::System => adw::ColorScheme::Default,
         Theme::Dark => adw::ColorScheme::ForceDark,
         Theme::Light => adw::ColorScheme::ForceLight,
     });

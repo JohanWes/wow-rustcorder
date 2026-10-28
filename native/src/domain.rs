@@ -97,7 +97,9 @@ pub enum DeathMarkerVisibility {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Theme {
+    /// Follow the system light/dark preference.
     #[default]
+    System,
     Dark,
     Light,
 }

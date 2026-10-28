@@ -319,15 +319,17 @@ pub static STORAGE_SPINS: [SpinSpec; 1] = [SpinSpec {
 pub static INTERFACE_COMBOS: [ComboSpec; 1] = [ComboSpec {
     field: "interface.theme",
     title: "Theme",
-    choices: &["Dark", "Light"],
+    choices: &["System", "Dark", "Light"],
     get: |config| match config.interface.theme {
-        Theme::Dark => 0,
-        Theme::Light => 1,
+        Theme::System => 0,
+        Theme::Dark => 1,
+        Theme::Light => 2,
     },
     set: |config, index| {
         config.interface.theme = match index {
-            1 => Theme::Light,
-            _ => Theme::Dark,
+            1 => Theme::Dark,
+            2 => Theme::Light,
+            _ => Theme::System,
         }
     },
 }];
