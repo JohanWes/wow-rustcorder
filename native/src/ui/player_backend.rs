@@ -18,8 +18,25 @@ use gtk4::glib::prelude::Cast;
 /// the source's and the decoder's queue, each fills completely within a second
 /// of loading, and glibc keeps the freed buffers of the previous recording in
 /// whichever arena the next one does not reuse. A local file needs no more
-/// than a few frames queued.
+/// than a few frames queued. A high-bitrate recording gets more, see
+/// `queue_bytes_for`.
 const DEMUX_QUEUE_BYTES: u32 = 8 * 1024 * 1024;
+
+/// The byte limit for the recording being opened; read when its queues are
+/// created.
+static QUEUE_BYTES: AtomicU32 = AtomicU32::new(DEMUX_QUEUE_BYTES);
+
+/// Enough bytes for the interleave floor below at the recording's average
+/// bitrate, with headroom for keyframes: below that the byte limit fills
+/// first and pause/play wedge again (about 33 Mbps at 8 MiB).
+pub fn queue_bytes_for(file_bytes: u64, duration_ms: u64) -> u32 {
+    if duration_ms == 0 {
+        return DEMUX_QUEUE_BYTES;
+    }
+    let floor_ms = DEMUX_MIN_INTERLEAVE_NS / 1_000_000;
+    let needed = file_bytes.saturating_mul(floor_ms) / duration_ms * 3 / 2;
+    needed.clamp(u64::from(DEMUX_QUEUE_BYTES), 128 * 1024 * 1024) as u32
+}
 
 /// Least time each multiqueue may hold ahead of the other streams. The
 /// defaults (100 ms in decodebin3, 250 ms in urisourcebin) are less than the
@@ -27,7 +44,7 @@ const DEMUX_QUEUE_BYTES: u32 = 8 * 1024 * 1024;
 /// buffer, but the demuxer can only reach it by pushing video into a queue
 /// that is already full. Pause then never completes and play/pause stop
 /// working, which a seek just before it triggered reliably on Windows with
-/// 60 fps HEVC. Two seconds of 20 Mbps video still fits the byte cap above.
+/// 60 fps HEVC.
 const DEMUX_MIN_INTERLEAVE_NS: u64 = 2_000_000_000;
 
 /// How precisely a seek has to land, which decides how much decoding GStreamer
@@ -82,7 +99,9 @@ impl PlayerBackend {
         &self.video
     }
 
-    pub fn open_uri(&self, uri: &str) -> Result<(), &'static str> {
+    /// `queue_bytes` comes from `queue_bytes_for`.
+    pub fn open_uri(&self, uri: &str, queue_bytes: u32) -> Result<(), &'static str> {
+        QUEUE_BYTES.store(queue_bytes, Ordering::Relaxed);
         let queue = self.player.queue().ok_or("Clapper player has no queue")?;
         let item = clapper::MediaItem::new(uri);
         queue.clear();
@@ -247,7 +266,7 @@ fn cap_if_multiqueue(element: &gst::Element) {
         .factory()
         .is_some_and(|factory| factory.name() == "multiqueue")
     {
-        element.set_property("max-size-bytes", DEMUX_QUEUE_BYTES);
+        element.set_property("max-size-bytes", QUEUE_BYTES.load(Ordering::Relaxed));
         // decodebin3 lowers the interleave again on every reset and latency
         // change, so the floor is reapplied whenever it moves.
         raise_interleave(element);
@@ -346,5 +365,19 @@ fn log_element(role: &str, element: Option<gstreamer::Element>) {
     use gstreamer::prelude::*;
     if let Some(factory) = element.and_then(|element| element.factory()) {
         tracing::info!(element = factory.name().as_str(), "{role}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_bytes_grow_only_for_high_bitrates() {
+        let minute_at = |mbps: u64| mbps * 1_000_000 / 8 * 60;
+        assert_eq!(queue_bytes_for(minute_at(20), 60_000), DEMUX_QUEUE_BYTES);
+        // 200 Mbps: 2 s is 50 MB, plus headroom.
+        assert_eq!(queue_bytes_for(minute_at(200), 60_000), 75_000_000);
+        assert_eq!(queue_bytes_for(minute_at(200), 0), DEMUX_QUEUE_BYTES);
     }
 }

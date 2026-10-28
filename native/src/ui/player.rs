@@ -662,7 +662,9 @@ impl Inner {
         let uri = gtk4::gio::File::for_path(&entry.media_path)
             .uri()
             .to_string();
-        self.duration_ms.set(entry.duration_ms);
+        let media_path = entry.media_path.clone();
+        let duration_ms = entry.duration_ms;
+        self.duration_ms.set(duration_ms);
         self.fps.set(entry.media.fps);
         let dimensions = entry.media.width.zip(entry.media.height);
         let has_content = entry.media.has_content;
@@ -704,7 +706,9 @@ impl Inner {
         };
         let previous_video_stream = backend.video_stream_token();
         backend.stop();
-        if let Err(error) = backend.open_uri(&uri) {
+        let file_bytes = std::fs::metadata(&media_path).map_or(0, |meta| meta.len());
+        let queue_bytes = super::player_backend::queue_bytes_for(file_bytes, duration_ms);
+        if let Err(error) = backend.open_uri(&uri, queue_bytes) {
             tracing::warn!(error, "player failed to load media");
             self.error_bar.set_visible(true);
             return;
