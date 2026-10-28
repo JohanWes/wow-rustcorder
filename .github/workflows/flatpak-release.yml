@@ -187,6 +187,10 @@ jobs:
     needs: [release, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    # Only for VT_API_KEY; no deployment record.
+    environment:
+      name: release
+      deployment: false
     permissions:
       contents: write
     steps:
@@ -201,6 +205,11 @@ jobs:
         with:
           name: warcraft-rustcorder-windows
           path: windows
+      - name: Scan Windows installer with VirusTotal
+        uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          files: windows/WarcraftRustcorder-*-setup.exe
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -214,6 +223,8 @@ jobs:
           test -s notes.md
           {
             printf -- '- **Windows:** download `WarcraftRustcorder-%s-setup.exe` below and run it.\n' "$version"
+            sha=$(sha256sum windows/WarcraftRustcorder-*-setup.exe | cut -d' ' -f1)
+            printf -- '  [VirusTotal scan](https://www.virustotal.com/gui/file/%s)\n' "$sha"
             printf -- '- **Linux:** install the Flatpak as described in the [README](https://github.com/JohanWes/wow-rustcorder#install).\n\n'
             cat notes.md
           } > notes-full.md

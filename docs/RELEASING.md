@@ -137,7 +137,9 @@ intentional.
 
 The tag job also builds `WarcraftRustcorder-<version>-setup.exe` (Inno Setup,
 per-user, no admin) and `latest.json` on a Windows runner with
-`windows/build.sh`, and attaches both to the GitHub release. The installer is
+`windows/build.sh`, and attaches both to the GitHub release. The publish job
+uploads the installer to VirusTotal and links its report in the release notes;
+the API key is `VT_API_KEY` in the `release` environment. The installer is
 not code-signed yet, so SmartScreen warns on first run.
 
 Installed apps check
