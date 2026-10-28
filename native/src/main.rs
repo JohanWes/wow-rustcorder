@@ -117,6 +117,7 @@ fn shell_options(setup: &coordinator::Setup, config: Option<&Config>) -> ui::She
         start_minimized: config.interface.start_minimized,
         close_to_tray: config.interface.close_to_tray,
         minimize_to_tray: config.interface.minimize_to_tray,
+        theme: config.interface.theme,
     }
 }
 

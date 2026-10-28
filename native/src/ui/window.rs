@@ -206,7 +206,7 @@ impl Shell {
             super::windows_diag::attach(&window);
         }
 
-        // Mirror the system theme onto the window so project CSS can darken
+        // Mirror the active theme onto the window so project CSS can darken
         // the class/outcome colors for light-theme contrast (WCAG AA).
         let style_manager = adw::StyleManager::default();
         let sync_light = {
@@ -511,6 +511,7 @@ impl Shell {
             .set(snapshot.config.interface.close_to_tray);
         self.minimize_to_tray
             .set(snapshot.config.interface.minimize_to_tray);
+        super::apply_theme(snapshot.config.interface.theme);
 
         self.sidebar.apply(snapshot);
         self.sidebar.status_card.apply(snapshot);

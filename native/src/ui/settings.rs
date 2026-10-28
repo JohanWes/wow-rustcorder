@@ -22,7 +22,7 @@ use libadwaita::prelude::*;
 
 use warcraft_rustcorder::config::{AuthorizedPath, Config, ValidationProblem};
 use warcraft_rustcorder::coordinator::{AppSnapshot, Command};
-use warcraft_rustcorder::domain::{Codec, RaidDifficulty, RecorderStatus, StorageLimit};
+use warcraft_rustcorder::domain::{Codec, RaidDifficulty, RecorderStatus, StorageLimit, Theme};
 use warcraft_rustcorder::recorder::{AudioDevice, Recorder};
 use warcraft_rustcorder::storage::now_unix_ms;
 
@@ -312,6 +312,22 @@ pub static STORAGE_SPINS: [SpinSpec; 1] = [SpinSpec {
         config.storage.limit = match std::num::NonZeroU64::new(value as u64) {
             None => StorageLimit::Unlimited,
             Some(gib) => StorageLimit::Gib(gib),
+        }
+    },
+}];
+
+pub static INTERFACE_COMBOS: [ComboSpec; 1] = [ComboSpec {
+    field: "interface.theme",
+    title: "Theme",
+    choices: &["Dark", "Light"],
+    get: |config| match config.interface.theme {
+        Theme::Dark => 0,
+        Theme::Light => 1,
+    },
+    set: |config, index| {
+        config.interface.theme = match index {
+            1 => Theme::Light,
+            _ => Theme::Dark,
         }
     },
 }];
@@ -777,6 +793,12 @@ impl Settings {
 
         let interface_group = adw::PreferencesGroup::new();
         interface_group.set_title("Interface");
+        interface_group.add(&combo_row(
+            &INTERFACE_COMBOS[0],
+            &draft,
+            &registry,
+            &refresh,
+        ));
         for spec in &INTERFACE_SWITCHES {
             interface_group.add(&switch_row(spec, &draft, &registry, &refresh));
         }

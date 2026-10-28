@@ -50,7 +50,7 @@ use libadwaita as adw;
 
 use warcraft_rustcorder::config::LayoutSettings;
 use warcraft_rustcorder::coordinator::{Command, CoordinatorHandle};
-use warcraft_rustcorder::domain::Category;
+use warcraft_rustcorder::domain::{Category, Theme};
 
 use tray_backend::{TrayBackend, TrayEvent};
 
@@ -65,6 +65,15 @@ pub struct ShellOptions {
     pub start_minimized: bool,
     pub close_to_tray: bool,
     pub minimize_to_tray: bool,
+    pub theme: Theme,
+}
+
+/// The app's own theme setting overrides the system light/dark preference.
+pub fn apply_theme(theme: Theme) {
+    adw::StyleManager::default().set_color_scheme(match theme {
+        Theme::Dark => adw::ColorScheme::ForceDark,
+        Theme::Light => adw::ColorScheme::ForceLight,
+    });
 }
 
 /// The one sink every widget uses to reach the coordinator or shell actions.
@@ -413,12 +422,14 @@ pub fn run(
         let start_minimized = options.start_minimized;
         let close_to_tray = options.close_to_tray;
         let minimize_to_tray = options.minimize_to_tray;
+        let theme = options.theme;
         application.connect_activate(move |application| {
             // Start-minimized is a first-activation flag only: a later
             // activation (second launcher invocation, tray "Open") must
             // reveal a window that is already running hidden.
             let first_activation = shell_cell.borrow().is_none();
             if first_activation {
+                apply_theme(theme);
                 let built = window::Shell::build(
                     application,
                     Rc::clone(&activate_coordinator),

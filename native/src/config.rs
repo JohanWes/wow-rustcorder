@@ -17,7 +17,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    Category, Codec, DeathMarkerVisibility, MarkerVisibility, RaidDifficulty, StorageLimit,
+    Category, Codec, DeathMarkerVisibility, MarkerVisibility, RaidDifficulty, StorageLimit, Theme,
 };
 
 const CONFIG_VERSION: u32 = 1;
@@ -238,6 +238,8 @@ pub struct InterfaceSettings {
     pub close_to_tray: bool,
     pub start_minimized: bool,
     #[serde(default)]
+    pub theme: Theme,
+    #[serde(default)]
     pub layout: LayoutSettings,
 }
 
@@ -253,6 +255,7 @@ impl Default for InterfaceSettings {
             minimize_to_tray: !cfg!(windows),
             close_to_tray: true,
             start_minimized: false,
+            theme: Theme::Dark,
             layout: LayoutSettings::default(),
         }
     }
