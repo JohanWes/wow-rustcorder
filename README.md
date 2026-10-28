@@ -10,7 +10,7 @@ It started out inspired by [Warcraft Recorder](https://github.com/aza547/wow-rec
 and has since grown into its own project: written entirely in Rust, with a
 focus on low CPU, memory and disk use while you play.
 
-![Intro: a recorded raid kill, the recording library, the combat meter with target filter and death recap, and the app's footprint](data/screenshots/warcraft-rustcorder-intro.avif)
+![Intro: a timed Mythic+ key, the recording library, the combat meter with spell tooltips, target filter and death recap, the app's footprint, and the Windows installer](data/screenshots/warcraft-rustcorder-intro.avif)
 
 ## Features
 
