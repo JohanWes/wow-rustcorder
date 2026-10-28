@@ -58,8 +58,9 @@ Name: "{autodesktop}\Warcraft Rustcorder"; Filename: "{app}\bin\warcraft-rustcor
 
 [Run]
 Filename: "{app}\bin\warcraft-rustcorder.exe"; Description: "Start Warcraft Rustcorder"; Flags: nowait postinstall skipifsilent
-; In-app updates run silently; start the new version afterwards.
-Filename: "{app}\bin\warcraft-rustcorder.exe"; Flags: nowait; Check: WizardSilent
+; In-app updates run silently; start the new version afterwards, shown even
+; with "Start minimized" on.
+Filename: "{app}\bin\warcraft-rustcorder.exe"; Parameters: "--updated"; Flags: nowait; Check: WizardSilent
 
 [Code]
 // The uninstaller does not close running apps the way setup does: stop the

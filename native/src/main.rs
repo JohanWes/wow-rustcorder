@@ -114,7 +114,10 @@ fn shell_options(setup: &coordinator::Setup, config: Option<&Config>) -> ui::She
     ui::ShellOptions {
         data_dir: setup.data_dir.clone(),
         config_dir: config_dir(&setup.config_path),
-        start_minimized: config.interface.start_minimized,
+        // The installer restarts the app with `--updated` after an in-app
+        // update, which the user just watched: show the window.
+        start_minimized: config.interface.start_minimized
+            && !std::env::args().any(|arg| arg == "--updated"),
         close_to_tray: config.interface.close_to_tray,
         minimize_to_tray: config.interface.minimize_to_tray,
         theme: config.interface.theme,
