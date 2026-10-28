@@ -605,6 +605,7 @@ impl Coordinator {
             ipc_socket: self.setup.ipc_socket.clone(),
             capture_root: capture_root(&self.config),
             settings: self.config.capture.clone(),
+            game_exes: self.config.flavors.windows_exes(),
         }
     }
 
@@ -1544,7 +1545,9 @@ impl Coordinator {
         let logs_changed = draft.flavors != self.config.flavors
             || draft.validate_log_paths != self.config.validate_log_paths;
         let storage_changed = draft.storage.recording_dir != self.config.storage.recording_dir;
-        let capture_changed = draft.capture != self.config.capture;
+        let capture_changed = draft.capture != self.config.capture
+            || (cfg!(windows)
+                && draft.flavors.windows_exes() != self.config.flavors.windows_exes());
         let limit_changed = draft.storage.limit != self.config.storage.limit;
 
         if let Err(error) = draft.save(&self.setup.config_path) {

@@ -91,6 +91,29 @@ impl FlavorSettings {
             ("flavors.era", &self.era),
         ]
     }
+
+    /// Windows executables of the enabled flavors, so the recorder never
+    /// films a client whose logs it is not reading. Era runs as Classic.
+    /// With none enabled nothing records, and every exe keeps the list valid.
+    pub fn windows_exes(&self) -> Vec<&'static str> {
+        let all = [
+            (&self.retail, "Wow.exe"),
+            (&self.retail_ptr, "WowT.exe"),
+            (&self.classic, "WowClassic.exe"),
+            (&self.classic_ptr, "WowClassicT.exe"),
+            (&self.era, "WowClassic.exe"),
+        ];
+        let mut exes: Vec<&'static str> = Vec::new();
+        for (flavor, exe) in all {
+            if flavor.enabled && !exes.contains(&exe) {
+                exes.push(exe);
+            }
+        }
+        if exes.is_empty() {
+            exes = vec!["Wow.exe", "WowT.exe", "WowClassic.exe", "WowClassicT.exe"];
+        }
+        exes
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
