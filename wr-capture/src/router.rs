@@ -43,6 +43,10 @@ impl Writer {
 
 /// Twice the GOP length the encoder is asked for.
 const MAX_GOP: i64 = 4 * 10_000_000;
+/// A start still waiting for its keyframe this long after it was asked for
+/// is dropped when a stop is refused. The app retries a refused stop only
+/// for its first second, so a later file would be orphaned.
+const START_GIVE_UP_MS: i64 = 500;
 
 pub struct Router {
     codec: VideoCodec,
@@ -58,6 +62,7 @@ pub struct Router {
     /// request id.
     replay: Option<(Writer, PathBuf, i64)>,
     start_pending: bool,
+    start_requested_ms: i64,
     regular: Option<(Writer, PathBuf)>,
     /// Set when a keyframe is wanted soon; the video thread clears it.
     pub want_keyframe: bool,
@@ -83,6 +88,7 @@ impl Router {
             keys: VecDeque::new(),
             replay: None,
             start_pending: false,
+            start_requested_ms: 0,
             regular: None,
             want_keyframe: false,
         }
@@ -115,6 +121,7 @@ impl Router {
             "start-replay-recording" => {
                 if self.regular.is_none() {
                     self.start_pending = true;
+                    self.start_requested_ms = now_ms;
                     self.want_keyframe = true;
                 }
                 vec![reply(true, None)]
@@ -128,8 +135,14 @@ impl Router {
                     )],
                 },
                 // Like GSR, a stop before the start took effect is refused;
-                // the app retries it.
-                None => vec![reply(false, Some("no recording is running".into()))],
+                // the app retries it, unless the start is old enough that
+                // the app is about to give up.
+                None => {
+                    if now_ms - self.start_requested_ms >= START_GIVE_UP_MS {
+                        self.start_pending = false;
+                    }
+                    vec![reply(false, Some("no recording is running".into()))]
+                }
             },
             _ => vec![reply(false, Some("unknown request".into()))],
         }
@@ -295,6 +308,17 @@ mod tests {
             router.keys,
             [6 * SECOND, 7 * SECOND, 8 * SECOND, 9 * SECOND]
         );
+    }
+
+    #[test]
+    fn late_refused_stop_drops_the_pending_start() {
+        let (replay, regular) = dirs("late-stop");
+        let mut router = Router::new(VideoCodec::H264, (64, 64), false, 30, replay, regular);
+        router.request(&request("start-replay-recording", 1, None), 0);
+        let refused = router.request(&request("stop-replay-recording", 2, None), 600);
+        assert_eq!(refused[0]["result"], "error");
+        router.push(frame(0), 700);
+        assert!(router.regular.is_none(), "no orphan recording opens");
     }
 
     #[test]
