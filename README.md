@@ -3,8 +3,7 @@
 Warcraft Rustcorder records World of Warcraft on Linux and Windows. It reads the
 combat log, detects each activity and saves a video with a metadata file beside
 it. It is a native Rust and GTK4 application, distributed as a Flatpak for
-Wayland sessions and as a Windows installer
-([download](https://github.com/JohanWes/wow-rustcorder/releases/latest)).
+Wayland sessions and as a Windows installer.
 
 It started out inspired by [Warcraft Recorder](https://github.com/aza547/wow-recorder)
 and has since grown into its own project: written entirely in Rust, with a
@@ -14,55 +13,63 @@ focus on low CPU, memory and disk use while you play.
 
 ## Features
 
-- **Automatic recording** of raid boss pulls, Mythic+ dungeons, arenas, solo
-  shuffle and battlegrounds. `gpu-screen-recorder` keeps a replay buffer, so
-  each video starts before the activity was detected.
-- **Library** with a category sidebar and a table you can sort by column and
-  filter by search chips (player, spec, zone, encounter, result, difficulty)
-  and date range. Recordings can be tagged, protected and deleted. The oldest
-  unprotected recordings are removed when the library exceeds the storage
-  limit in Settings.
-- **Player** with a combat timeline showing deaths and encounter and round
-  boundaries, playback speeds from 0.25x to 2x, frame stepping while paused
-  (`,` and `.`), jumping between markers (`[` and `]`), and clipping.
-- **Combat meter** over the video, toggled with `M`. It shows damage done,
-  damage taken, healing, interrupts, dispels, casts, deaths and buff uptime,
-  for the current fight or the whole recording. You can filter by target, open
-  a player to see their spells, and click a death or event row to seek the
-  video to a few seconds before it.
-- **Background recording** from a tray icon. Closing or minimizing the window
-  hides it to the tray by default, and Settings can start the app minimized.
+- **Automatic recording** of raid pulls, Mythic+, arenas, solo shuffle and
+  battlegrounds, starting from before the activity was detected.
+- **Library** you can sort, search, filter by date, tag and protect. Past the
+  storage limit in Settings (50 GiB by default), the oldest unprotected
+  recordings are deleted.
+- **Player** with a combat timeline of deaths and encounters, playback speed,
+  frame stepping and clipping.
+- **Combat meter** over the video (`M`): damage, healing, deaths and more, per
+  player, spell and target. Click a death to jump to it.
+- **Runs in the tray** while you play.
+
+About 65 MB of RAM and near-zero CPU while idle in the tray; video encoding
+runs on the GPU.
 
 ## Install
+
+### Linux
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/JohanWes/wow-rustcorder/main/install.sh | bash
 ```
 
-The installer adds the project's signed Flatpak remote, installs the app and
-starts it. If Flatpak is missing, it stops and prints the package command for
-common distributions. It adds Flathub when the GNOME 50 runtime is not
-available from another remote. After installing, it warns about an X11
-session, a missing screen-capture portal or PipeWire not running.
+The script adds the project's signed Flatpak remote (and Flathub if needed),
+installs and starts the app, and warns if your session lacks something
+recording needs.
 
-Or add the remote and install directly:
+<details>
+<summary>Install without the script</summary>
 
 ```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak remote-add --user --if-not-exists warcraft-rustcorder \
   https://johanwes.github.io/wow-rustcorder/index.flatpakrepo
 flatpak install --user warcraft-rustcorder io.github.JohanWes.WarcraftRustcorder
 ```
 
+</details>
+
 Requirements:
 
-- A Wayland session. X11 is not supported.
-- Flatpak, with Flathub for the GNOME 50 runtime.
+- A Wayland session (X11 is not supported) and Flatpak, with Flathub for the
+  GNOME 50 runtime.
 - `xdg-desktop-portal` with a ScreenCast backend for your desktop, and
   PipeWire.
 - A GPU with hardware video encoding.
+- For the tray icon on GNOME, the
+  [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/).
+  Without a tray, closing the window quits the app.
 
-`gpu-screen-recorder`, the Clapper video player and FFmpeg are bundled in the
-Flatpak.
+Update by re-running the script or with
+`flatpak update --user io.github.JohanWes.WarcraftRustcorder`. Uninstall with
+`flatpak uninstall --user io.github.JohanWes.WarcraftRustcorder`; your
+recordings stay in place. Add `--delete-data` to also remove settings.
+
+The app used to be called Warcraft Recorder. An install from before the rename
+moves over on its next update, settings included. Choose the combat-log and
+recording folders again in Settings afterwards.
 
 ### Windows
 
@@ -72,6 +79,10 @@ and run it. It installs for your user only, without admin rights, and needs
 Windows 10 (version 2004) or later. The installer is not code-signed, so
 SmartScreen may ask you to choose **More info** and then **Run anyway**. The app
 checks for updates itself. Uninstall it from **Settings > Apps**.
+
+On Windows, recording is done by `wr-capture`, the project's own recorder of
+about 600 KB. It captures with Windows Graphics Capture and encodes through
+Media Foundation, on the GPU's hardware encoder when one is available.
 
 ## Setup
 
@@ -84,63 +95,11 @@ checks for updates itself. Uninstall it from **Settings > Apps**.
    [SimpleCombatLogger](https://www.curseforge.com/wow/addons/simplecombatlogger).
 4. Leave the app running. Each activity appears in the library when it ends.
 
-The tray icon uses the StatusNotifierItem protocol. GNOME needs the
-[AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/)
-to show it. Without a tray, closing the window quits the app.
-
-## Footprint
-
-Measured on an AMD Ryzen 7 9800X3D with a Radeon RX 9070:
-
-| Measurement | Value |
-|---|---|
-| Window open, empty library | about 100 MB RSS, 24 threads |
-| Tray only (started minimized) | about 59 MB RSS, 13 threads |
-| CPU while idle | about 0% |
-| Startup scan, 38 recordings | about 55 ms, about 1 MB above the empty baseline |
-| Installed size | about 38 MB |
-| First download | about 18 MB |
-| Typical update | about 2 MB |
-
-The installed size covers the app binary (about 5 MB), the spell database and
-the bundled FFmpeg, `gpu-screen-recorder` and Clapper. The GNOME runtime is
-shared with other Flatpaks and not included. The 23 MB spell database is a
-separate file, so an update only downloads it again when it changes. Combat
-meter data is loaded for the selected recording only. Video encoding runs on
-the GPU through `gpu-screen-recorder`.
-
-## Update and uninstall
-
-Re-run the installer, or:
-
-```sh
-flatpak update --user io.github.JohanWes.WarcraftRustcorder
-```
-
-The app used to be called Warcraft Recorder. An install from before the rename
-moves over on its next update, settings included. Choose the combat-log and
-recording folders again in Settings afterwards.
-
-To uninstall:
-
-```sh
-flatpak uninstall --user io.github.JohanWes.WarcraftRustcorder
-```
-
-Recordings are ordinary video and JSON files in your recording folder. An
-uninstall does not remove them. Add `--delete-data` to also remove the app's
-settings.
-
 ## Development
 
-All code is one Cargo package under `native/`. From the repository root:
+All code is one Cargo package under `native/`; the Windows capture helper is in
+`wr-capture/`. See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the checks
+to run and [`docs/RELEASING.md`](docs/RELEASING.md) for releases.
 
-```sh
-cargo fmt --manifest-path native/Cargo.toml --check
-cargo clippy --manifest-path native/Cargo.toml --all-targets --all-features -- -D warnings
-cargo test --manifest-path native/Cargo.toml --all-targets
-cargo build --manifest-path native/Cargo.toml --release
-```
-
-See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) and [`docs/RELEASING.md`](docs/RELEASING.md). Licensed GPL-3.0-or-later.
-Capture uses [`gpu-screen-recorder`](https://git.dec05eba.com/gpu-screen-recorder/); based on the original [Warcraft Recorder](https://github.com/aza547/wow-recorder).
+Licensed GPL-3.0-or-later. Capture on Linux uses
+[`gpu-screen-recorder`](https://git.dec05eba.com/gpu-screen-recorder/).
