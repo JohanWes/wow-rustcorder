@@ -21,7 +21,12 @@ use libadwaita::prelude::*;
 use serde::Deserialize;
 use warcraft_rustcorder::process;
 
+use super::operational_actions::info_dialog as info;
+
 const MANIFEST_URL: &str = "https://johanwes.github.io/wow-rustcorder/windows/latest.json";
+/// The only place an installer may come from, so a tampered manifest cannot
+/// point the app at someone else's executable.
+const RELEASE_PREFIX: &str = "https://github.com/JohanWes/wow-rustcorder/releases/download/";
 
 #[derive(Clone, Debug, Deserialize)]
 struct Latest {
@@ -271,9 +276,16 @@ fn fetch_latest() -> Result<Option<Latest>, String> {
     let text = String::from_utf8_lossy(&output.stdout);
     let (body, code) = text.rsplit_once('\n').unwrap_or(("", &text));
     match code.trim() {
-        "200" => serde_json::from_str(body)
-            .map(Some)
-            .map_err(|error| error.to_string()),
+        "200" => {
+            let latest: Latest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+            if !latest.url.starts_with(RELEASE_PREFIX) || latest.url.contains("..") {
+                return Err(format!(
+                    "the update manifest points outside the project's releases: {}",
+                    latest.url
+                ));
+            }
+            Ok(Some(latest))
+        }
         "404" => Ok(None),
         code => Err(format!("the update server answered HTTP {code}")),
     }
@@ -304,11 +316,4 @@ fn is_newer(candidate: &str, current: &str) -> bool {
             .collect()
     };
     parts(candidate) > parts(current)
-}
-
-fn info(parent: &gtk4::Widget, heading: &str, body: &str) {
-    let dialog = adw::AlertDialog::new(Some(heading), Some(body));
-    dialog.add_responses(&[("close", "Close")]);
-    dialog.set_close_response("close");
-    dialog.present(Some(parent));
 }

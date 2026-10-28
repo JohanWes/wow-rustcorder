@@ -203,8 +203,7 @@ fn flatpak_available() -> bool {
     })
 }
 
-#[cfg(unix)]
-fn info_dialog(parent: &gtk4::Widget, heading: &str, body: &str) {
+pub(super) fn info_dialog(parent: &gtk4::Widget, heading: &str, body: &str) {
     let dialog = adw::AlertDialog::new(Some(heading), Some(body));
     dialog.add_responses(&[("close", "Close")]);
     dialog.set_close_response("close");
