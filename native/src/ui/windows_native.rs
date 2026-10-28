@@ -22,7 +22,8 @@
 //! GL renderer draws transparent pixels black. So the window is clipped to its
 //! visible part with a window region, which cuts off GTK's invisible resize
 //! margin: resizing grabs the visible edge instead. Shadows and rounded
-//! corners, which would show as black, are styled away.
+//! corners, which would show as black, are styled away, and popovers lose
+//! their arrow, whose strip beside the arrow would show black too.
 
 use std::cell::{Cell, RefCell};
 
@@ -64,8 +65,8 @@ const VK_MASK: u8 = 0xE8;
 
 const CSS: &str = "
 window.csd { box-shadow: none; border-radius: 0; }
-popover > contents, popover > arrow { box-shadow: none; }
-tooltip { box-shadow: none; }
+popover > contents, popover > arrow { box-shadow: none; border-radius: 0; }
+tooltip { box-shadow: none; border-radius: 0; }
 ";
 
 unsafe extern "C" {
@@ -103,6 +104,7 @@ pub fn setup(window: &adw::ApplicationWindow) {
         &provider,
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
     );
+    drop_popover_arrows();
     window.connect_realize(|window| {
         let Some(surface) = window.surface() else {
             return;
@@ -254,6 +256,41 @@ fn edge_hit(hwnd: HWND, point: POINT) -> Option<u32> {
         (.., true) => HTBOTTOM,
         _ => return None,
     })
+}
+
+/// Turns off the arrow of every popover just before it shows, including the
+/// ones GTK and libadwaita build internally (dropdowns, menus).
+fn drop_popover_arrows() {
+    use gtk4::glib::gobject_ffi;
+    use gtk4::glib::translate::{FromGlibPtrNone, IntoGlib};
+
+    unsafe extern "C" fn hook(
+        _hint: *mut gobject_ffi::GSignalInvocationHint,
+        n_values: u32,
+        values: *const gobject_ffi::GValue,
+        _data: gtk4::glib::ffi::gpointer,
+    ) -> gtk4::glib::ffi::gboolean {
+        if n_values > 0 {
+            // SAFETY: values[0] is the emitting instance, a GtkWidget.
+            let instance = unsafe {
+                gtk4::glib::Object::from_glib_none(gobject_ffi::g_value_get_object(values))
+            };
+            if let Some(popover) = instance.downcast_ref::<gtk4::Popover>() {
+                popover.set_has_arrow(false);
+            }
+        }
+        // Keep the hook installed.
+        gtk4::glib::ffi::GTRUE
+    }
+
+    // SAFETY: "show" is a GtkWidget signal; the hook lives for the process.
+    unsafe {
+        let signal = gobject_ffi::g_signal_lookup(
+            c"show".as_ptr(),
+            <gtk4::Widget as gtk4::glib::prelude::StaticType>::static_type().into_glib(),
+        );
+        gobject_ffi::g_signal_add_emission_hook(signal, 0, Some(hook), std::ptr::null_mut(), None);
+    }
 }
 
 fn raise_font_size() {
