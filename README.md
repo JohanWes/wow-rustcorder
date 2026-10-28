@@ -81,8 +81,9 @@ SmartScreen may ask you to choose **More info** and then **Run anyway**. The app
 checks for updates itself. Uninstall it from **Settings > Apps**.
 
 On Windows, recording is done by `wr-capture`, the project's own recorder of
-about 600 KB. It captures with Windows Graphics Capture and encodes through
-Media Foundation, on the GPU's hardware encoder when one is available.
+under 1 MB. It captures the game window with Windows Graphics Capture and
+encodes through Media Foundation, on the GPU's hardware encoder when one is
+available.
 
 ## Setup
 
