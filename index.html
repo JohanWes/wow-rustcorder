@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Warcraft Recorder Flatpak repository</title>
+    <title>Warcraft Rustcorder</title>
     <style>
       body {
         margin: 0 auto;
@@ -33,23 +33,35 @@
     </style>
   </head>
   <body>
-    <h1>Warcraft Recorder</h1>
+    <h1>Warcraft Rustcorder</h1>
     <p class="sub">
-      Signed Flatpak repository for the native Linux/Wayland build.
+      Signed Flatpak repository for Linux (Wayland), plus Windows updates.
     </p>
 
     <p>
       Automatically record and review World of Warcraft gameplay locally.
-      Flatpak is the only install and update path.
     </p>
 
-    <h2>Install</h2>
-    <pre><code>flatpak remote-add --user --if-not-exists warcraft-recorder \
-  https://johanwes.github.io/wow-recorder-linuxwayland/index.flatpakrepo
-flatpak install --user warcraft-recorder io.github.JohanWes.WarcraftRecorder</code></pre>
+    <h2>Install on Linux</h2>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/JohanWes/wow-rustcorder/main/install.sh | bash</code></pre>
+    <p>Or add the remote and install directly:</p>
+    <pre><code>flatpak remote-add --user --if-not-exists warcraft-rustcorder \
+  https://johanwes.github.io/wow-rustcorder/index.flatpakrepo
+flatpak install --user warcraft-rustcorder io.github.JohanWes.WarcraftRustcorder</code></pre>
 
     <h2>Update</h2>
-    <pre><code>flatpak update --user io.github.JohanWes.WarcraftRecorder</code></pre>
+    <pre><code>flatpak update --user</code></pre>
+    <p>
+      Installs of the old name (<code>io.github.JohanWes.WarcraftRecorder</code>)
+      move to Warcraft Rustcorder on their next update, settings included.
+    </p>
+
+    <h2>Install on Windows</h2>
+    <p>
+      Download <code>WarcraftRustcorder-&lt;version&gt;-setup.exe</code> from the
+      <a href="https://github.com/JohanWes/wow-rustcorder/releases/latest">latest release</a>
+      and run it. The app checks for updates itself.
+    </p>
 
     <p>
       Commits are GPG-signed with key <code>8FAF1364A2686F0F</code>. The public
@@ -59,7 +71,7 @@ flatpak install --user warcraft-recorder io.github.JohanWes.WarcraftRecorder</co
 
     <p>
       Source, releases, and issues:
-      <a href="https://github.com/JohanWes/wow-recorder-linuxwayland">github.com/JohanWes/wow-recorder-linuxwayland</a>
+      <a href="https://github.com/JohanWes/wow-rustcorder">github.com/JohanWes/wow-rustcorder</a>
     </p>
   </body>
 </html>
