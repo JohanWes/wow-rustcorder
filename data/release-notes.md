@@ -13,6 +13,7 @@ running version. Only `## <version>` headings and `- ` lines are parsed.
 - Size the player's demux queue from the recording bitrate to stop pause hangs
 - Skip locked files during storage eviction instead of stalling the coordinator
 - Drop a stale pending start in wr-capture so no orphan recording opens
+- Show the window after an in-app update even when starting minimized
 
 ## 1.0.16
 - Add wr-capture, a Windows replay-buffer recorder speaking the GSR protocol

@@ -19,6 +19,8 @@ project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 - Storage cleanup skips recordings that are in use instead of stalling the app.
 - Windows: popovers no longer show black arrows and corners.
 - Windows: no orphan recording opens after a cancelled start.
+- Windows: the window shows after an in-app update, even with "Start
+  minimized" on.
 
 ### Changed
 - Windows: only the WoW executables of enabled flavors are captured.
