@@ -8,7 +8,9 @@ Linux releases ship as a Flatpak; Windows releases as an installer (see
 ## Candidate build
 
 1. Update `native/Cargo.toml` and the first `<release version="...">` in
-   `data/io.github.JohanWes.WarcraftRustcorder.metainfo.xml` to the same version.
+   `data/io.github.JohanWes.WarcraftRustcorder.metainfo.xml` to the same version,
+   add a `CHANGELOG.md` entry, and run `cargo build --release` so
+   `native/Cargo.lock` records the new version.
 2. Run `bash scripts/generate-release-notes.sh <version>` as the last thing
    before the release commit. It prepends the commit subjects since the
    previous tag to `data/release-notes.md`, which is compiled into the binary
@@ -24,7 +26,8 @@ Linux releases ship as a Flatpak; Windows releases as an installer (see
 
 The signing secrets live in the `release` environment:
 `FLATPAK_GPG_PRIVATE_KEY` contains the armored private key and
-`FLATPAK_GPG_KEY_ID` contains only its public key ID. Never commit the key or
+`FLATPAK_GPG_KEY_ID` contains only its public key ID (`8FAF1364A2686F0F`; the
+private key is backed up outside the repository). Never commit the key or
 print either secret.
 
 CI builds from the locked `native/Cargo.lock` and `flatpak/cargo-sources.json`,
@@ -52,7 +55,22 @@ deploys them to GitHub Pages (source: GitHub Actions). Until then, no user
 sees the release. To redeploy a tag, run
 `gh workflow run pages.yml -f tag=v<version>`. CI artifacts expire after 90
 days, so a draft must be published within that time. Never hand-edit the
-Pages site.
+Pages site. `gh` defaults to the upstream fork parent, so pass
+`--repo JohanWes/wow-rustcorder` on every call.
+
+Once the Pages run is green, the served summary must match its line in the
+release's `.sha256` asset:
+
+```sh
+curl -s https://johanwes.github.io/wow-rustcorder/summary | sha256sum
+```
+
+`flatpak remote-info` answers from cached metadata; run
+`flatpak update --appstream <remote>` before trusting it.
+
+If a source fetch fails in CI (GitHub archives, or the gpu-screen-recorder
+tarball on dec05eba.com), re-run once with `gh run rerun <id> --failed` before
+investigating.
 
 Verify with only the public key:
 
