@@ -37,6 +37,17 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.0.17" date="2026-10-28">
+      <description>
+        <p>
+          Adds a theme setting (System, Dark or Light), fixes playback hangs
+          when pausing, and keeps storage cleanup from stalling the app when a
+          recording is in use. On Windows, only the enabled WoW clients are
+          captured and updates are accepted only from the project's GitHub
+          releases.
+        </p>
+      </description>
+    </release>
     <release version="1.0.16" date="2026-10-28">
       <description>
         <p>

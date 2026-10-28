@@ -7,6 +7,24 @@ Notable changes to the native Linux/Wayland application. The format follows
 Release history before the native rewrite belongs to the upstream Electron
 project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 
+## 1.0.17 - 2026-10-28
+
+### Added
+- Theme setting in Settings: System (follows the desktop, the default), Dark
+  or Light.
+
+### Fixed
+- The player no longer hangs on pause, including after seeking in HEVC
+  recordings.
+- Storage cleanup skips recordings that are in use instead of stalling the app.
+- Windows: popovers no longer show black arrows and corners.
+- Windows: no orphan recording opens after a cancelled start.
+
+### Changed
+- Windows: only the WoW executables of enabled flavors are captured.
+- Windows: updates are only accepted from the project's GitHub release
+  downloads.
+
 ## 1.0.16 - 2026-10-28
 
 ### Added

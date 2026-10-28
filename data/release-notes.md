@@ -4,6 +4,16 @@ Commit subjects per release, written by `scripts/generate-release-notes.sh` and
 compiled into the binary: the "What's new" dialog reads the section matching the
 running version. Only `## <version>` headings and `- ` lines are parsed.
 
+## 1.0.17
+- Fix pause hang after seeking HEVC and log player stalls
+- Remove popover arrows and rounded corners that render black on Windows
+- Add a theme setting: System (follows the desktop, default), Dark or Light
+- Capture only the WoW executables of enabled flavors on Windows
+- Only accept Windows updates from the project's GitHub release downloads
+- Size the player's demux queue from the recording bitrate to stop pause hangs
+- Skip locked files during storage eviction instead of stalling the coordinator
+- Drop a stale pending start in wr-capture so no orphan recording opens
+
 ## 1.0.16
 - Add wr-capture, a Windows replay-buffer recorder speaking the GSR protocol
 - Port the GTK app to Windows, driving wr-capture over stdin/stdout
