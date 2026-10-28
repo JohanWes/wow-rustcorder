@@ -440,7 +440,7 @@ impl Storage {
     pub fn delete(&self, entries: &[LibraryEntry]) -> DeleteResult {
         let mut result = DeleteResult::default();
         for entry in entries {
-            match self.delete_one(entry) {
+            match self.delete_one(entry, true) {
                 Ok(()) => result.deleted.push(entry.id.clone()),
                 Err(error) => {
                     // Same rule as eviction: only a sidecar-stage failure
@@ -455,10 +455,14 @@ impl Storage {
         result
     }
 
-    fn delete_one(&self, entry: &LibraryEntry) -> Result<(), String> {
+    /// `wait_for_release` is for a user delete of the recording the player
+    /// was just showing; eviction skips a locked file at once instead of
+    /// stalling the coordinator.
+    fn delete_one(&self, entry: &LibraryEntry, wait_for_release: bool) -> Result<(), String> {
         self.check_owned(&entry.media_path)?;
         self.check_owned(&entry.sidecar_path)?;
-        remove_media(&entry.media_path).map_err(|error| format!("media: {error}"))?;
+        remove_media(&entry.media_path, wait_for_release)
+            .map_err(|error| format!("media: {error}"))?;
         match fs::remove_file(&entry.sidecar_path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -539,7 +543,7 @@ impl Storage {
             if entry.protected {
                 continue;
             }
-            match self.delete_one(entry) {
+            match self.delete_one(entry, false) {
                 Ok(()) => {
                     used = used.saturating_sub(size);
                     result.evicted.push(entry.id.clone());
@@ -1704,9 +1708,10 @@ pub fn now_unix_ms() -> i64 {
 
 /// Windows cannot delete a file that is still open, and the player closes a
 /// recording it was showing only shortly after being told to.
-fn remove_media(path: &Path) -> io::Result<()> {
+fn remove_media(path: &Path, wait_for_release: bool) -> io::Result<()> {
     const SHARING_VIOLATION: i32 = 32;
-    for _ in 0..20 {
+    let attempts = if wait_for_release { 20 } else { 0 };
+    for _ in 0..attempts {
         match fs::remove_file(path) {
             Err(error) if cfg!(windows) && error.raw_os_error() == Some(SHARING_VIOLATION) => {
                 std::thread::sleep(std::time::Duration::from_millis(100));
