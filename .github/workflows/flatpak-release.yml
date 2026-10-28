@@ -71,7 +71,10 @@ jobs:
     name: Signed release candidate
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: release
+    # Only for the signing secrets; no deployment record.
+    environment:
+      name: release
+      deployment: false
     permissions:
       contents: read
     container:
@@ -123,10 +126,6 @@ jobs:
             --end-of-life-rebase="io.github.JohanWes.WarcraftRecorder=$APP_ID" \
             repo app/io.github.JohanWes.WarcraftRecorder/x86_64/stable
           bash scripts/prepare-flatpakrepo.sh repo
-          # Served at the pre-rename URL: points old remotes at the new one.
-          ostree init --mode=archive-z2 --repo=redirect-repo
-          flatpak build-update-repo --gpg-sign="$FLATPAK_GPG_KEY_ID" \
-            --redirect-url=https://johanwes.github.io/wow-rustcorder/ redirect-repo
           sha256sum warcraft-rustcorder.flatpak > warcraft-rustcorder.flatpak.sha256
           sha256sum repo/summary repo/index.flatpakrepo >> warcraft-rustcorder.flatpak.sha256
       - name: Upload release-candidate artifact
@@ -137,7 +136,6 @@ jobs:
             warcraft-rustcorder.flatpak
             warcraft-rustcorder.flatpak.sha256
             repo
-            redirect-repo
           if-no-files-found: error
 
   windows:
@@ -220,7 +218,8 @@ jobs:
             cat notes.md
           } > notes-full.md
           mv notes-full.md notes.md
-          gh release create "$GITHUB_REF_NAME" \
+          # A draft: publishing it later (pages.yml) is what ships the release.
+          gh release create "$GITHUB_REF_NAME" --draft \
             --title "Warcraft Rustcorder $version" \
             --notes-file notes.md \
             candidate/warcraft-rustcorder.flatpak \

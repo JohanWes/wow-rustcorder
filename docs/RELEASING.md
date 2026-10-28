@@ -17,14 +17,15 @@ Linux releases ship as a Flatpak; Windows releases as an installer (see
 3. Run the four standard Rust checks from the root.
 4. Create an annotated tag whose name is exactly `v<version>` and push it. The
    tag workflow rejects a version whose Cargo, AppStream, or release-notes
-   entries disagree before building.
-5. Configure the `release` environment secrets:
-   `FLATPAK_GPG_PRIVATE_KEY` contains the armored private key and
-   `FLATPAK_GPG_KEY_ID` contains only its public key ID. Never commit the key
-   or print either secret.
-6. Download the workflow's release-candidate artifact and verify the recorded
-   SHA-256. The bundle is suitable for disposable-user testing and does not
-   configure a remote.
+   entries disagree before building, and ends by creating a **draft** GitHub
+   release with the `.flatpak` bundle, its checksums, the Windows installer
+   and `latest.json`. The bundle is suitable for disposable-user testing and
+   does not configure a remote.
+
+The signing secrets live in the `release` environment:
+`FLATPAK_GPG_PRIVATE_KEY` contains the armored private key and
+`FLATPAK_GPG_KEY_ID` contains only its public key ID. Never commit the key or
+print either secret.
 
 CI builds from the locked `native/Cargo.lock` and `flatpak/cargo-sources.json`,
 uses the pinned GNOME 50 SDK/runtime, runs `flatpak-builder-lint` for manifest,
@@ -37,13 +38,23 @@ vary by build time.
 The AppStream screenshot is served from the committed `main` tree, while the
 candidate repository also carries its mirrored `screenshots/x86_64` ref.
 
-## Manual remote publication
+## Publishing
 
-Never run this for an unapproved candidate. After a candidate is approved,
-publish the `repo/` directory produced by that build to the project GitHub
-Pages site at the permanent URL. Keep
-`index.flatpakrepo`, `summary`, the signed summary, objects, and static deltas
-together. Verify with only the public key:
+Publishing the draft release ships it:
+
+```sh
+gh release edit v<version> --draft=false --repo JohanWes/wow-rustcorder
+```
+
+That triggers `.github/workflows/pages.yml`, which takes the tag's signed
+`repo/` and `latest.json` from its CI run, adds `data/site/index.html`, and
+deploys them to GitHub Pages (source: GitHub Actions). Until then, no user
+sees the release. To redeploy a tag, run
+`gh workflow run pages.yml -f tag=v<version>`. CI artifacts expire after 90
+days, so a draft must be published within that time. Never hand-edit the
+Pages site.
+
+Verify with only the public key:
 
 ```sh
 gpg --import public-release-key.asc
@@ -72,11 +83,13 @@ One-time steps for the first release after the rename:
 1. Rename the GitHub repository to `wow-rustcorder`. Pages then serves the
    existing `gh-pages` at the new URL, and the old URL stops working.
 2. Tag and publish the release as usual, to the new URL.
-3. Keep the old URL alive: create the repository `JohanWes/johanwes.github.io`
-   with Pages enabled, and put the release artifact's `redirect-repo/`
-   contents in its `wow-recorder-linuxwayland/` folder. It is a signed,
-   empty repository whose summary redirects old remotes to the new URL. Keep
-   it as long as old installs may still update.
+3. Keep the old URL alive: the repository `JohanWes/johanwes.github.io`
+   serves, in its `wow-recorder-linuxwayland/` folder, a signed, empty
+   repository whose summary redirects old remotes to the new URL. It was
+   built once, for 1.0.16, and needs no updates. Keep it, and the
+   end-of-life rebase in the release workflow, as long as old installs may
+   still update (at least until 2027-04); the redirect alone does not migrate
+   them.
 4. Check with an old install: `flatpak update --user` should report the
    end-of-life rebase and install `io.github.JohanWes.WarcraftRustcorder`.
 
@@ -89,15 +102,9 @@ shown above. Update with `flatpak update --user`. For candidate testing use:
 flatpak install --user ./warcraft-rustcorder.flatpak
 ```
 
-To roll back to the previous signed deployment, inspect the remote log and
-deploy its previous commit:
-
-```sh
-flatpak remote-info --user --log warcraft-rustcorder \
-  io.github.JohanWes.WarcraftRustcorder
-flatpak update --user --commit=<previous-commit> \
-  io.github.JohanWes.WarcraftRustcorder
-```
+The remote holds only the latest build, so there is no server-side rollback:
+fix forward with a new patch release. A user can go back by installing an
+older release's `.flatpak` bundle from GitHub Releases.
 
 Uninstalling the app does not delete recordings:
 
@@ -118,9 +125,8 @@ not code-signed yet, so SmartScreen warns on first run.
 Installed apps check
 `https://johanwes.github.io/wow-rustcorder/windows/latest.json` at
 startup and from "Check for updates", then download the installer, verify its
-SHA-256, and run it silently. As with the Flatpak repo, nothing reaches users
-until that file lands: copy the release's `latest.json` to `windows/` on the
-`gh-pages` branch together with the Flatpak `repo/` publication.
+SHA-256, and run it silently. `pages.yml` deploys that file together with the
+Flatpak repo when the release is published.
 
 To build locally, run `bash windows/build.sh` in an MSYS2 UCRT64 shell with
 the packages listed at the top of the script and Inno Setup 6. Output lands in

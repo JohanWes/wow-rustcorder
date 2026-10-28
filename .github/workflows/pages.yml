@@ -1,0 +1,55 @@
+name: Publish to GitHub Pages
+
+# Publishing a draft release ships it: this deploys that tag's signed Flatpak
+# repo and Windows update manifest, which is what users' updates read.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy, e.g. v1.0.16
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy release to Pages
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+      - name: Assemble site from the tag's build
+        run: |
+          run_id=$(gh run list --workflow flatpak-release.yml --event push \
+            --branch "$TAG" --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId')
+          test -n "$run_id"
+          gh run download "$run_id" -n "warcraft-rustcorder-flatpak-$TAG" -D candidate
+          gh run download "$run_id" -n warcraft-rustcorder-windows -D windows
+          mkdir -p site/windows
+          cp -a candidate/repo/. site/
+          cp windows/latest.json site/windows/
+          cp data/site/index.html site/
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
