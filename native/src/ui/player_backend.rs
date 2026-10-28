@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use clapper_gtk::prelude::AvExt;
 use gstreamer as gst;
@@ -19,6 +20,15 @@ use gtk4::glib::prelude::Cast;
 /// whichever arena the next one does not reuse. A local file needs no more
 /// than a few frames queued.
 const DEMUX_QUEUE_BYTES: u32 = 8 * 1024 * 1024;
+
+/// Least time each multiqueue may hold ahead of the other streams. The
+/// defaults (100 ms in decodebin3, 250 ms in urisourcebin) are less than the
+/// audio sink buffers ahead. Pausing makes the audio sink wait for one more
+/// buffer, but the demuxer can only reach it by pushing video into a queue
+/// that is already full. Pause then never completes and play/pause stop
+/// working, which a seek just before it triggered reliably on Windows with
+/// 60 fps HEVC. Two seconds of 20 Mbps video still fits the byte cap above.
+const DEMUX_MIN_INTERLEAVE_NS: u64 = 2_000_000_000;
 
 /// How precisely a seek has to land, which decides how much decoding GStreamer
 /// does before it can present a frame.
@@ -58,6 +68,7 @@ impl PlayerBackend {
         player.connect_current_audio_decoder_notify(|player| {
             log_element("audio decoder", player.current_audio_decoder());
         });
+        log_playback_problems(&player);
         if cfg!(windows) {
             match front_stereo_sink() {
                 Ok(sink) => player.set_audio_sink(Some(&sink)),
@@ -155,6 +166,10 @@ impl PlayerBackend {
             .ok()
     }
 
+    pub fn state(&self) -> PlayerState {
+        self.player.state()
+    }
+
     /// Playing or paused with media: seeks/steps are meaningful.
     pub fn is_ready(&self) -> bool {
         matches!(
@@ -180,7 +195,7 @@ impl PlayerBackend {
         self.player.connect_seek_done(move |_| callback());
     }
 }
-
+/// Tunes every multiqueue as it joins a bin. Clapper hides its pipeline, and
 /// Caps every multiqueue as it joins a bin. Clapper hides its pipeline, and
 /// anything of ours it links in (a filter, the sink) only gets there once the
 /// video chain is complete, by which time the source queue of the first
@@ -233,6 +248,18 @@ fn cap_if_multiqueue(element: &gst::Element) {
         .is_some_and(|factory| factory.name() == "multiqueue")
     {
         element.set_property("max-size-bytes", DEMUX_QUEUE_BYTES);
+        // decodebin3 lowers the interleave again on every reset and latency
+        // change, so the floor is reapplied whenever it moves.
+        raise_interleave(element);
+        element.connect_notify(Some("min-interleave-time"), |element, _| {
+            raise_interleave(element);
+        });
+    }
+}
+
+fn raise_interleave(element: &gst::Element) {
+    if element.property::<u64>("min-interleave-time") < DEMUX_MIN_INTERLEAVE_NS {
+        element.set_property("min-interleave-time", DEMUX_MIN_INTERLEAVE_NS);
     }
 }
 
@@ -282,6 +309,36 @@ fn at_most_stereo(caps: &gst::Caps) -> bool {
         && caps
             .iter()
             .all(|structure| matches!(structure.get::<i32>("channels"), Ok(1 | 2)))
+}
+
+/// GStreamer errors and warnings that Clapper reports, which otherwise vanish.
+/// The bindings skip these signals, so they are connected by name. A broken
+/// file or device can repeat a warning on every buffer, hence the cap.
+fn log_playback_problems(player: &clapper::Player) {
+    const LIMIT: u32 = 50;
+    static REPORTED: AtomicU32 = AtomicU32::new(0);
+    for signal in ["error", "warning"] {
+        player.connect_local(signal, false, move |args| {
+            let count = REPORTED.fetch_add(1, Ordering::Relaxed);
+            if count < LIMIT {
+                let error = args
+                    .get(1)
+                    .and_then(|value| value.get::<glib::Error>().ok());
+                let details = args.get(2).and_then(|value| value.get::<String>().ok());
+                tracing::warn!(
+                    error = error.as_ref().map(|error| error.message()),
+                    details,
+                    "playback {signal}"
+                );
+            } else if count == LIMIT {
+                tracing::warn!("further playback errors suppressed this session");
+            }
+            None
+        });
+    }
+    player.connect_missing_plugin(|_, name, _| {
+        tracing::warn!(name, "playback is missing a GStreamer plugin");
+    });
 }
 
 /// Which decoder playback picked: hardware (d3d11*, va*, nv*) or software.

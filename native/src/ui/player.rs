@@ -111,6 +111,12 @@ struct Inner {
     /// for a zero target — silently dropped without a completion.
     pending_seek: Cell<Option<(f64, SeekMode)>>,
     seek_in_flight: Cell<bool>,
+    /// Bumped by every seek handed to Clapper, so a stall check only reports
+    /// the seek it was armed for.
+    seek_epoch: Cell<u64>,
+    /// Stall warnings logged this session; capped so a wedged player cannot
+    /// flood app.log.
+    stall_reports: Cell<u32>,
     /// Bumped by every load and unload so timers armed for an earlier media
     /// item cannot report on the current one.
     load_generation: Cell<u64>,
@@ -293,6 +299,8 @@ impl Player {
             clip_mode: Cell::new(false),
             pending_seek: Cell::new(None),
             seek_in_flight: Cell::new(false),
+            seek_epoch: Cell::new(0),
+            stall_reports: Cell::new(0),
             load_generation: Cell::new(0),
             time_label_state: Cell::new(None),
             updating: Cell::new(false),
@@ -812,6 +820,10 @@ impl Inner {
             }
             let ready = this.backend().is_some_and(PlayerBackend::is_ready);
             if !ready && this.active_id.borrow().is_some() {
+                tracing::warn!(
+                    state = ?this.backend().map(PlayerBackend::state),
+                    "media not ready 4 s after loading"
+                );
                 let is_clip = this.active_entry_is_clip();
                 this.set_media_usable(false, is_clip);
                 this.error_bar.set_visible(true);
@@ -866,7 +878,7 @@ impl Inner {
             .is_some_and(|entry| entry.category == Category::Clip)
     }
 
-    fn toggle_playing(&self) {
+    fn toggle_playing(self: &Rc<Self>) {
         if !self.media_usable.get() {
             return;
         }
@@ -878,6 +890,7 @@ impl Inner {
             } else {
                 backend.pause();
             }
+            self.check_play_state(playing);
         }
         self.play_button.set_icon_name(if playing {
             "media-playback-pause-symbolic"
@@ -929,7 +942,7 @@ impl Inner {
                 // the only one left: a queue entry kept here would be applied
                 // on top of it by the completion below.
                 self.pending_seek.set(None);
-                backend.seek(seconds, mode);
+                self.issue_seek(seconds, mode);
                 return;
             }
         } else {
@@ -940,7 +953,68 @@ impl Inner {
         self.pending_seek.set(Some((seconds, mode)));
     }
 
+    /// How long a seek or play/pause may take before it counts as stuck.
+    const STALL_TIMEOUT: Duration = Duration::from_secs(3);
+    const STALL_REPORT_LIMIT: u32 = 20;
+
+    /// Hands a seek to Clapper and warns if its completion never arrives,
+    /// which is how a wedged pipeline first shows.
+    fn issue_seek(self: &Rc<Self>, seconds: f64, mode: SeekMode) {
+        let Some(backend) = self.backend() else {
+            return;
+        };
+        backend.seek(seconds, mode);
+        let epoch = self.seek_epoch.get().wrapping_add(1);
+        self.seek_epoch.set(epoch);
+        let this = Rc::clone(self);
+        gtk4::glib::timeout_add_local_once(Self::STALL_TIMEOUT, move || {
+            if this.seek_epoch.get() == epoch && this.seek_in_flight.get() {
+                this.report_stall(&format!(
+                    "seek to {seconds:.1} s ({mode:?}) did not complete"
+                ));
+            }
+        });
+    }
+
+    /// Warns if Clapper has not reached the requested play/pause state by
+    /// the timeout and the user has not changed their mind since.
+    fn check_play_state(self: &Rc<Self>, playing: bool) {
+        let generation = self.load_generation.get();
+        let this = Rc::clone(self);
+        gtk4::glib::timeout_add_local_once(Self::STALL_TIMEOUT, move || {
+            let wanted = if playing {
+                PlayerState::Playing
+            } else {
+                PlayerState::Paused
+            };
+            let reached = this
+                .backend()
+                .is_none_or(|backend| backend.state() == wanted);
+            if this.load_generation.get() == generation && this.playing.get() == playing && !reached
+            {
+                this.report_stall(&format!("{wanted:?} was not reached"));
+            }
+        });
+    }
+
+    fn report_stall(&self, what: &str) {
+        let count = self.stall_reports.get();
+        self.stall_reports.set(count.saturating_add(1));
+        if count < Self::STALL_REPORT_LIMIT {
+            tracing::warn!(
+                state = ?self.backend().map(PlayerBackend::state),
+                seek_in_flight = self.seek_in_flight.get(),
+                pending_seek = ?self.pending_seek.get(),
+                "player stalled: {what} within {} s",
+                Self::STALL_TIMEOUT.as_secs()
+            );
+        } else if count == Self::STALL_REPORT_LIMIT {
+            tracing::warn!("further player stall warnings suppressed this session");
+        }
+    }
+
     fn on_state_changed(self: &Rc<Self>, state: PlayerState) {
+        tracing::info!(?state, "player state");
         match state {
             // First readiness of the loaded item: hand over a seek that was
             // queued during loading. Clapper executes it and reports a
@@ -948,9 +1022,7 @@ impl Inner {
             PlayerState::Playing | PlayerState::Paused => {
                 if let Some((target, mode)) = self.pending_seek.take() {
                     self.seek_in_flight.set(true);
-                    if let Some(backend) = self.backend() {
-                        backend.seek(target, mode);
-                    }
+                    self.issue_seek(target, mode);
                 }
             }
             // The item the in-flight seek was issued against is gone, so its
@@ -971,11 +1043,7 @@ impl Inner {
             return;
         }
         match self.pending_seek.take() {
-            Some((target, mode)) => {
-                if let Some(backend) = self.backend() {
-                    backend.seek(target, mode);
-                }
-            }
+            Some((target, mode)) => self.issue_seek(target, mode),
             None => {
                 // The requested target stays on screen until Clapper's own
                 // position notification arrives. Re-reading the position here
