@@ -76,6 +76,10 @@
 /* Library outcome colors: reinforcement only, the label carries the meaning. */
 .wr-result-win { color: @success_color; font-weight: 600; }
 .wr-result-loss { color: @error_color; font-weight: 600; }
+.wr-result-abandoned { color: #e0182d; font-weight: 600; }
+.wr-result-depleted { color: #ff8c1a; font-weight: 600; }
+window.wr-light .wr-result-abandoned { color: #b3001b; }
+window.wr-light .wr-result-depleted { color: #c25e00; }
 
 /* The library scrollbar remains an overlay, so leave a modest trailing gutter
    inside the table for the final Date column. */

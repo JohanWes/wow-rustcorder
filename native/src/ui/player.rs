@@ -71,6 +71,10 @@ struct Inner {
     bottom_bar: gtk4::Revealer,
     /// Bumped on every fullscreen change; only the newest idle tick runs.
     fullscreen_generation: Cell<u64>,
+    /// The window was maximized when fullscreen started. Windows restores a
+    /// maximized window to its normal size on unfullscreen, so leaving
+    /// fullscreen maximizes it again.
+    maximized_before_fullscreen: Cell<bool>,
     last_motion: Cell<Instant>,
     last_pointer: Cell<(f64, f64)>,
 
@@ -274,6 +278,7 @@ impl Player {
             reveal_button,
             bottom_bar,
             fullscreen_generation: Cell::new(0),
+            maximized_before_fullscreen: Cell::new(false),
             last_motion: Cell::new(Instant::now()),
             last_pointer: Cell::new((f64::NAN, f64::NAN)),
             video_dimensions_handler: RefCell::new(None),
@@ -1144,6 +1149,12 @@ impl Inner {
         let generation = self.fullscreen_generation.get().wrapping_add(1);
         self.fullscreen_generation.set(generation);
         if !fullscreen {
+            if self.maximized_before_fullscreen.replace(false)
+                && let Some(window) = self.stack.root().and_downcast::<gtk4::Window>()
+                && !window.is_maximized()
+            {
+                window.maximize();
+            }
             return;
         }
         let this = Rc::clone(self);
@@ -1192,6 +1203,9 @@ impl Inner {
 
     fn toggle_fullscreen(&self) {
         if let Some(window) = self.stack.root().and_downcast::<gtk4::Window>() {
+            if !window.is_fullscreen() {
+                self.maximized_before_fullscreen.set(window.is_maximized());
+            }
             window.set_fullscreened(!window.is_fullscreen());
         }
     }

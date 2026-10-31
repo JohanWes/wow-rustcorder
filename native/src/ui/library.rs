@@ -95,6 +95,8 @@ struct RowModel {
     kind: String,
     source: String,
     outcome_order: u8,
+    /// The Result cell's color class.
+    result_css: Option<&'static str>,
     /// The recording player's class CSS class (from spec id), for the
     /// class-colored Details name.
     class_css: Option<&'static str>,
@@ -186,6 +188,23 @@ fn result_label(entry: &LibraryEntry, family: Family) -> String {
     }
 }
 
+/// Mythic+ keys get their own colors: abandoned red, depleted orange.
+fn result_css(entry: &LibraryEntry) -> Option<&'static str> {
+    match (&entry.details, entry.outcome) {
+        (ActivityDetails::Dungeon { upgrade_level, .. }, Outcome::Complete) => {
+            if upgrade_level.is_some_and(|level| level > 0) {
+                Some("wr-result-win")
+            } else {
+                Some("wr-result-depleted")
+            }
+        }
+        (ActivityDetails::Dungeon { .. }, _) => Some("wr-result-abandoned"),
+        (_, Outcome::Win | Outcome::Complete) => Some("wr-result-win"),
+        (_, Outcome::Loss | Outcome::Abandoned) => Some("wr-result-loss"),
+        (_, Outcome::Unknown) => None,
+    }
+}
+
 fn win_loss(outcome: Outcome) -> String {
     match outcome {
         Outcome::Win => "Win",
@@ -271,6 +290,7 @@ fn build_rows(snapshot: &AppSnapshot, category: &Category) -> Vec<Rc<RowModel>> 
                 kind,
                 source,
                 outcome_order: outcome_rank(primary.outcome),
+                result_css: result_css(primary),
                 class_css: primary
                     .player
                     .as_ref()
@@ -1125,6 +1145,13 @@ impl Inner {
             .map(|row| row.id.clone())
             .collect();
 
+        // New recordings land at the top. GTK keeps the selected row in place,
+        // which would push them out of view, so a list at the top stays there.
+        let at_top = self
+            .column_view
+            .vadjustment()
+            .is_none_or(|adj| adj.value() < 1.0);
+
         self.state.rebuilding_store.set(true);
         self.store.splice(0, self.store.n_items(), &rows);
         self.state.rebuilding_store.set(false);
@@ -1153,6 +1180,10 @@ impl Inner {
         } else {
             self.selection
                 .set_selection(&wanted, &gtk4::Bitset::new_range(0, visible));
+        }
+        if at_top && visible > 0 {
+            self.column_view
+                .scroll_to(0, None, gtk4::ListScrollFlags::NONE, None);
         }
         self.update_bulk_bar(&self.selected_rows());
     }
@@ -1457,11 +1488,9 @@ impl Inner {
     }
 
     fn show_row_menu(&self, row: &RowModel, from: &gtk4::Widget, x: f64, y: f64) {
-        let Some((x, y)) = self
-            .row_menu
-            .parent()
-            .and_then(|parent| from.translate_coordinates(&parent, x, y))
-        else {
+        let Some(point) = self.row_menu.parent().and_then(|parent| {
+            from.compute_point(&parent, &gtk4::graphene::Point::new(x as f32, y as f32))
+        }) else {
             return;
         };
         *self.state.menu_target.borrow_mut() = Some(row.id.clone());
@@ -1476,7 +1505,12 @@ impl Inner {
         menu.append_section(None, &destructive);
         self.row_menu.set_menu_model(Some(&menu));
         self.row_menu
-            .set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+            .set_pointing_to(Some(&gtk4::gdk::Rectangle::new(
+                point.x() as i32,
+                point.y() as i32,
+                1,
+                1,
+            )));
         self.row_menu.popup();
     }
 
@@ -1615,17 +1649,23 @@ fn text_column(
     column
 }
 
+const RESULT_CLASSES: [&str; 4] = [
+    "wr-result-win",
+    "wr-result-loss",
+    "wr-result-abandoned",
+    "wr-result-depleted",
+];
+
 /// The Result column: a text cell plus a win/loss outcome color (the label
 /// conveys the meaning; color is reinforcement only).
 fn result_column() -> gtk4::ColumnViewColumn {
     let column = label_column("Result", |label, row| {
         label.set_text(&row.result);
-        label.remove_css_class("wr-result-win");
-        label.remove_css_class("wr-result-loss");
-        match row.outcome_order {
-            0 => label.add_css_class("wr-result-win"),
-            1 => label.add_css_class("wr-result-loss"),
-            _ => {}
+        for class in RESULT_CLASSES {
+            label.remove_css_class(class);
+        }
+        if let Some(class) = row.result_css {
+            label.add_css_class(class);
         }
     });
     column.set_sorter(Some(&sort_by(|r| r.outcome_order)));
