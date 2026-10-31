@@ -37,6 +37,16 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.0.18" date="2026-11-01">
+      <description>
+        <p>
+          Mythic+ results in the library are colored by outcome: timed green,
+          depleted orange, abandoned red. New recordings stay visible at the
+          top of the library, and on Windows a maximized window is maximized
+          again after leaving fullscreen.
+        </p>
+      </description>
+    </release>
     <release version="1.0.17" date="2026-10-28">
       <description>
         <p>

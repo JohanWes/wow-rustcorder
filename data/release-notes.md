@@ -4,6 +4,9 @@ Commit subjects per release, written by `scripts/generate-release-notes.sh` and
 compiled into the binary: the "What's new" dialog reads the section matching the
 running version. Only `## <version>` headings and `- ` lines are parsed.
 
+## 1.0.18
+- Color M+ results, keep new recordings visible, restore maximized after fullscreen
+
 ## 1.0.17
 - Fix pause hang after seeking HEVC and log player stalls
 - Remove popover arrows and rounded corners that render black on Windows

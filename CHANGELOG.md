@@ -7,6 +7,16 @@ Notable changes to the native Linux/Wayland application. The format follows
 Release history before the native rewrite belongs to the upstream Electron
 project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 
+## 1.0.18 - 2026-11-01
+
+### Changed
+- Mythic+ results in the library are colored by outcome: timed green,
+  depleted orange, abandoned red.
+
+### Fixed
+- New recordings stay visible when the library is scrolled to the top.
+- Windows: leaving fullscreen in the player restores a maximized window.
+
 ## 1.0.17 - 2026-10-28
 
 ### Added

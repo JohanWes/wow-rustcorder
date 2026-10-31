@@ -2,7 +2,7 @@
 
 [package]
 name = "warcraft-rustcorder"
-version = "1.0.17"
+version = "1.0.18"
 edition = "2024"
 license = "GPL-3.0-or-later"
 publish = false
