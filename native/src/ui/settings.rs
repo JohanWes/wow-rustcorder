@@ -334,7 +334,7 @@ pub static INTERFACE_COMBOS: [ComboSpec; 1] = [ComboSpec {
     },
 }];
 
-pub static INTERFACE_SWITCHES: [SwitchSpec; 4] = [
+pub static INTERFACE_SWITCHES: [SwitchSpec; 5] = [
     SwitchSpec {
         field: "interface.hide_empty_categories",
         title: "Hide empty categories",
@@ -362,6 +362,13 @@ pub static INTERFACE_SWITCHES: [SwitchSpec; 4] = [
         subtitle: "",
         get: |config| config.interface.start_minimized,
         set: |config, value| config.interface.start_minimized = value,
+    },
+    SwitchSpec {
+        field: "interface.start_with_system",
+        title: "Start with system",
+        subtitle: "Launch when you log in",
+        get: |config| config.interface.start_with_system,
+        set: |config, value| config.interface.start_with_system = value,
     },
 ];
 

@@ -175,6 +175,8 @@ pub struct Shell {
     latest_snapshot: Rc<RefCell<Option<Arc<AppSnapshot>>>>,
     close_to_tray: Rc<Cell<bool>>,
     minimize_to_tray: Rc<Cell<bool>>,
+    /// The "Start with system" value last handed to the OS.
+    start_with_system: Cell<Option<bool>>,
     tray_available: Rc<Cell<bool>>,
     hold_guard: Rc<RefCell<Option<gtk4::gio::ApplicationHoldGuard>>>,
     sink: ActionSink,
@@ -453,6 +455,7 @@ impl Shell {
             latest_snapshot,
             close_to_tray: Rc::new(Cell::new(close_to_tray)),
             minimize_to_tray: Rc::new(Cell::new(minimize_to_tray)),
+            start_with_system: Cell::new(None),
             tray_available,
             hold_guard: Rc::new(RefCell::new(None)),
             sink,
@@ -512,6 +515,7 @@ impl Shell {
         self.minimize_to_tray
             .set(snapshot.config.interface.minimize_to_tray);
         super::apply_theme(snapshot.config.interface.theme);
+        self.sync_start_with_system(snapshot.config.interface.start_with_system);
 
         self.sidebar.apply(snapshot);
         self.sidebar.status_card.apply(snapshot);
@@ -588,6 +592,24 @@ impl Shell {
             });
         }
         self.toasts.add_toast(toast);
+    }
+
+    /// Windows rewrites the Run key on every launch so it follows a moved
+    /// install. The portal is only asked on a change, since it may prompt.
+    fn sync_start_with_system(&self, enabled: bool) {
+        let previous = self.start_with_system.replace(Some(enabled));
+        if previous == Some(enabled) || (previous.is_none() && !cfg!(windows)) {
+            return;
+        }
+        let toasts = self.toasts.clone();
+        super::autostart::set(enabled, move |result| {
+            if let Err(error) = result {
+                tracing::warn!(%error, enabled, "start with system failed");
+                toasts.add_toast(adw::Toast::new(&format!(
+                    "Couldn't change Start with system: {error}"
+                )));
+            }
+        });
     }
 
     fn connect_close_request(&self) {

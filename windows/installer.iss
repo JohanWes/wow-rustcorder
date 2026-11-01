@@ -76,5 +76,7 @@ begin
     StringChangeEx(Dir, '''', '''''', True);
     Exec('powershell.exe', '-NoProfile -NonInteractive -Command "Get-Process | Where-Object { $_.Path -like ''' + Dir + '\*'' } | Stop-Process -Force; Start-Sleep 1"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // "Start with system" (native/src/ui/autostart.rs).
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Warcraft Rustcorder');
   end;
 end;

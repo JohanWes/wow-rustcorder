@@ -260,6 +260,10 @@ pub struct InterfaceSettings {
     pub minimize_to_tray: bool,
     pub close_to_tray: bool,
     pub start_minimized: bool,
+    /// Launch at login: the Run registry key on Windows, the Background
+    /// portal (or an autostart desktop file outside Flatpak) on Linux.
+    #[serde(default)]
+    pub start_with_system: bool,
     #[serde(default)]
     pub theme: Theme,
     #[serde(default)]
@@ -278,6 +282,7 @@ impl Default for InterfaceSettings {
             minimize_to_tray: !cfg!(windows),
             close_to_tray: true,
             start_minimized: false,
+            start_with_system: false,
             theme: Theme::System,
             layout: LayoutSettings::default(),
         }

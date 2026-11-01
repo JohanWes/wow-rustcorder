@@ -9,6 +9,7 @@
 //! a producer calls `wake_shell`, so an idle shell never polls. No stores, no
 //! per-widget view models, no string events, no blocking work.
 
+mod autostart;
 pub mod damage_meter;
 pub mod filters;
 pub mod library;
