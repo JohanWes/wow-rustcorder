@@ -143,6 +143,13 @@ pub enum RecorderEvent {
     },
     /// The portal wrote (or replaced) the reusable capture-target token.
     TargetTokenAvailable(String),
+    /// GSR is alive but has not started capturing within
+    /// `Timeouts::capture_start`, usually a stuck screen-share portal.
+    CaptureStalled {
+        log_tail: String,
+    },
+    /// Capture started after an earlier `CaptureStalled`.
+    CaptureStarted,
 }
 
 /// Bounded waits. Tests shrink them; production uses the defaults.
@@ -158,6 +165,9 @@ pub struct Timeouts {
     /// Wait for the old child to exit during reselection/shutdown before
     /// escalating.
     pub exit_grace: Duration,
+    /// How long a live GSR may sit in portal setup before `poll` reports it
+    /// as stalled. Generous, since a first selection waits on the user.
+    pub capture_start: Duration,
 }
 
 impl Default for Timeouts {
@@ -167,6 +177,7 @@ impl Default for Timeouts {
             replay_reply: Duration::from_secs(20),
             stop_reply: Duration::from_secs(30),
             exit_grace: Duration::from_secs(2),
+            capture_start: Duration::from_secs(45),
         }
     }
 }
@@ -189,6 +200,17 @@ const TOKEN_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 /// start is younger than this; after that no recording exists.
 const START_GRACE: Duration = Duration::from_secs(1);
 const IPC_CONNECT_RETRY: Duration = Duration::from_millis(25);
+/// GSR logs this once the portal stream is live and frames can flow.
+const CAPTURE_STARTED_MARKER: &str = "pipewire negotiation finished";
+const CAPTURE_START_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Whether the current child has actually started capturing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CaptureStart {
+    Waiting,
+    Stalled,
+    Started,
+}
 
 /// The connection to GSR's `-ipc` socket. Requests are tiny and the socket is
 /// otherwise idle, so writes on the nonblocking stream never wait.
@@ -362,6 +384,11 @@ pub struct Recorder {
     ending: Option<PendingEnd>,
     last_token: Option<String>,
     token_checked_at: Option<Instant>,
+    /// `gsr.log` length when the current child spawned; its own output
+    /// starts here.
+    log_start: u64,
+    capture_start: CaptureStart,
+    capture_checked_at: Option<Instant>,
     timeouts: Timeouts,
 }
 
@@ -389,6 +416,9 @@ impl Recorder {
             ending: None,
             last_token: None,
             token_checked_at: None,
+            log_start: 0,
+            capture_start: CaptureStart::Waiting,
+            capture_checked_at: None,
             timeouts,
         }
     }
@@ -501,6 +531,7 @@ impl Recorder {
             .create(true)
             .append(true)
             .open(Self::log_path(config))?;
+        let log_start = log.metadata()?.len();
         let mut command = process::command(&config.gsr_binary);
         // Stable Flatpak constrains the GTK process allocator arenas for its
         // RSS gate; the recorder must retain its own defaults.
@@ -560,6 +591,14 @@ impl Recorder {
         self.child = Some(child);
         self.ipc = Some(ipc);
         self.spawned_at = Some(Instant::now());
+        self.log_start = log_start;
+        // Windows' wr-capture has no portal step and logs elsewhere.
+        self.capture_start = if cfg!(unix) {
+            CaptureStart::Waiting
+        } else {
+            CaptureStart::Started
+        };
+        self.capture_checked_at = None;
         Ok(())
     }
 
@@ -649,9 +688,10 @@ impl Recorder {
         }
     }
 
-    /// Whether a replay-buffer child is currently available.
+    /// Whether a replay-buffer child is currently available. A child stuck
+    /// before capture started does not count.
     pub fn is_running(&self) -> bool {
-        self.child.is_some()
+        self.child.is_some() && self.capture_start != CaptureStart::Stalled
     }
 
     /// True between `request_end` and its `CaptureEnded`.
@@ -964,8 +1004,42 @@ impl Recorder {
                 events.push(RecorderEvent::TargetTokenAvailable(token));
             }
         }
+        self.check_capture_start(&mut events);
         self.poll_pending_end(&mut events);
         events
+    }
+
+    /// Watch the child's log for the capture-started marker. A child that
+    /// stays alive without it is waiting on the portal; a portal whose screen
+    /// picker fails to load (e.g. after a Qt upgrade) leaves it there forever.
+    fn check_capture_start(&mut self, events: &mut Vec<RecorderEvent>) {
+        if self.child.is_none() || self.capture_start == CaptureStart::Started {
+            return;
+        }
+        let (Some(config), Some(spawned_at)) = (&self.config, self.spawned_at) else {
+            return;
+        };
+        if self
+            .capture_checked_at
+            .is_some_and(|checked_at| checked_at.elapsed() < CAPTURE_START_CHECK_INTERVAL)
+        {
+            return;
+        }
+        self.capture_checked_at = Some(Instant::now());
+        let log_path = Self::log_path(config);
+        if log_contains_since(&log_path, self.log_start, CAPTURE_STARTED_MARKER) {
+            if self.capture_start == CaptureStart::Stalled {
+                events.push(RecorderEvent::CaptureStarted);
+            }
+            self.capture_start = CaptureStart::Started;
+        } else if self.capture_start == CaptureStart::Waiting
+            && spawned_at.elapsed() >= self.timeouts.capture_start
+        {
+            self.capture_start = CaptureStart::Stalled;
+            events.push(RecorderEvent::CaptureStalled {
+                log_tail: process::read_log_tail(&log_path),
+            });
+        }
     }
 
     fn schedule_restart(&mut self, now_ms: i64, events: &mut Vec<RecorderEvent>) {
@@ -1185,6 +1259,25 @@ fn parse_audio_devices(text: &str) -> AudioDevices {
     devices
 }
 
+/// Whether `path` contains `needle` at or after byte `offset`.
+fn log_contains_since(path: &Path, offset: u64, needle: &str) -> bool {
+    use std::io::{Seek, SeekFrom};
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    // A rotated or truncated log restarts from the top.
+    let size = file.metadata().map(|meta| meta.len()).unwrap_or(0);
+    let offset = if offset > size { 0 } else { offset };
+    if file.seek(SeekFrom::Start(offset)).is_err() {
+        return false;
+    }
+    let mut text = Vec::new();
+    if file.read_to_end(&mut text).is_err() {
+        return false;
+    }
+    String::from_utf8_lossy(&text).contains(needle)
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -1199,6 +1292,7 @@ mod tests {
             replay_reply: Duration::from_millis(300),
             stop_reply: Duration::from_millis(300),
             exit_grace: Duration::from_millis(500),
+            capture_start: Duration::from_millis(300),
         }
     }
 
@@ -1474,6 +1568,61 @@ mod tests {
         recorder.shutdown().unwrap();
         assert!(recorder.poll(now_ms + 60_000).is_empty());
         assert!(recorder.child.is_none());
+    }
+
+    #[test]
+    fn a_child_stuck_in_portal_setup_is_reported_until_capture_starts() {
+        let mut recorder = Recorder::with_timeouts(test_timeouts());
+        let config = test_config("capture-stall");
+        fs::create_dir_all(&config.data_dir).unwrap();
+        fs::write(config.data_dir.join("fake-stall"), "").unwrap();
+        recorder.arm(&config).unwrap();
+        assert!(recorder.is_running());
+
+        std::thread::sleep(test_timeouts().capture_start);
+        let events = recorder.poll(now_unix_ms());
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, RecorderEvent::CaptureStalled { .. })),
+            "expected a stall, got {events:?}"
+        );
+        assert!(!recorder.is_running());
+        // Reported once, not every poll.
+        recorder.capture_checked_at = None;
+        assert!(recorder.poll(now_unix_ms()).is_empty());
+
+        // The portal finally delivers: the stall clears.
+        let mut log = fs::OpenOptions::new()
+            .append(true)
+            .open(Recorder::log_path(&config))
+            .unwrap();
+        writeln!(log, "gsr info: {CAPTURE_STARTED_MARKER}").unwrap();
+        recorder.capture_checked_at = None;
+        assert!(
+            recorder
+                .poll(now_unix_ms())
+                .contains(&RecorderEvent::CaptureStarted)
+        );
+        assert!(recorder.is_running());
+        recorder.shutdown().unwrap();
+    }
+
+    #[test]
+    fn a_child_that_starts_capturing_is_never_reported_stalled() {
+        let mut recorder = Recorder::with_timeouts(test_timeouts());
+        let config = test_config("capture-ok");
+        recorder.arm(&config).unwrap();
+        std::thread::sleep(test_timeouts().capture_start);
+        let events = recorder.poll(now_unix_ms());
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, RecorderEvent::CaptureStalled { .. })),
+            "unexpected stall: {events:?}"
+        );
+        assert!(recorder.is_running());
+        recorder.shutdown().unwrap();
     }
 
     #[test]

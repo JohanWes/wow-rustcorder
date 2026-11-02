@@ -8,6 +8,7 @@ socket's directory, so parallel tests stay isolated:
   fake-no-replay   save-replay fails
   fake-no-regular  stop-replay-recording fails
   fake-hold        stop-replay-recording is not answered while it exists
+  fake-stall       never log that capture started (a stuck portal)
 """
 import json
 import os
@@ -60,6 +61,9 @@ signal.signal(signal.SIGTERM, quit_cleanly)
 server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 server.bind(path)
 server.listen(8)
+if not exists("fake-stall"):
+    print("gsr info: gsr_capture_portal_start: pipewire negotiation finished",
+          file=sys.stderr, flush=True)
 clients = {}
 held = []
 saved = {"Replay": 0, "Video": 0}

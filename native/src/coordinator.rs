@@ -55,6 +55,12 @@ const COMMAND_BATCH: usize = 16;
 const MAX_PROBLEMS: usize = 8;
 const CAPTURE_STOPPED_PROBLEM: &str = "Screen capture stopped unexpectedly.";
 const CAPTURE_RESTART_FAILED_PROBLEM: &str = "Screen capture could not be restarted.";
+const CAPTURE_STALLED_PROBLEM: &str =
+    "Screen capture is stuck waiting for the screen-share portal.";
+const CAPTURE_STALLED_HINT: &str = "The recorder is running but never received a screen to capture. \
+If no screen picker appeared, the desktop portal is likely broken, often after a system \
+update. Restart it (on KDE: systemctl --user restart plasma-xdg-desktop-portal-kde) or \
+log out and back in, then restart Warcraft Rustcorder.";
 /// Keep queued transcodes finite while preserving the one-worker design.
 const MAX_MEDIA_QUEUE: usize = 16;
 
@@ -754,6 +760,19 @@ impl Coordinator {
                 }
                 RecorderEvent::RestartScheduled { attempt, .. } => {
                     tracing::info!(attempt, "capture restart scheduled");
+                }
+                RecorderEvent::CaptureStalled { log_tail } => {
+                    self.armed = false;
+                    self.push_capture_problem(
+                        CAPTURE_STALLED_PROBLEM,
+                        Some(format!("{CAPTURE_STALLED_HINT}\n\n{log_tail}")),
+                    );
+                }
+                RecorderEvent::CaptureStarted => {
+                    self.armed = true;
+                    self.clear_recovered_capture_problems();
+                    tracing::info!("capture started after a portal delay");
+                    self.dirty = true;
                 }
             }
         }
@@ -1845,7 +1864,7 @@ fn clear_recovered_capture_problems(problems: &mut Vec<Problem>) -> bool {
     problems.retain(|problem| {
         !matches!(
             problem.summary.as_str(),
-            CAPTURE_STOPPED_PROBLEM | CAPTURE_RESTART_FAILED_PROBLEM
+            CAPTURE_STOPPED_PROBLEM | CAPTURE_RESTART_FAILED_PROBLEM | CAPTURE_STALLED_PROBLEM
         )
     });
     problems.len() != previous_len

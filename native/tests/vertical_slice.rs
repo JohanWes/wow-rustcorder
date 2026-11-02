@@ -187,6 +187,7 @@ fn setup(root: &Path) -> Setup {
             // recording and a 20 s `pump` timeout, not a clear assertion.
             stop_reply: Duration::from_secs(2),
             exit_grace: Duration::from_millis(500),
+            capture_start: Duration::from_secs(5),
         },
         wow_check_interval: Duration::from_millis(50),
         poll_interval: Duration::from_millis(5),
