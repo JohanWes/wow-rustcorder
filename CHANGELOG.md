@@ -7,6 +7,17 @@ Notable changes to the native Linux/Wayland application. The format follows
 Release history before the native rewrite belongs to the upstream Electron
 project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 
+## 1.0.19 - 2026-11-03
+
+### Added
+- "Start with system" setting that launches the app at login on Windows and
+  Linux.
+
+### Fixed
+- Linux: when screen capture is stuck waiting on the screen-share portal, the
+  app now reports it with steps to restart the portal instead of silently not
+  recording.
+
 ## 1.0.18 - 2026-11-01
 
 ### Changed

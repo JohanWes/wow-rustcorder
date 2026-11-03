@@ -37,6 +37,15 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.0.19" date="2026-11-03">
+      <description>
+        <p>
+          A new "Start with system" setting launches the app at login. When
+          screen capture is stuck waiting on the screen-share portal, the app
+          now says so and explains how to restart the portal.
+        </p>
+      </description>
+    </release>
     <release version="1.0.18" date="2026-11-01">
       <description>
         <p>

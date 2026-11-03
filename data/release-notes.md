@@ -4,6 +4,10 @@ Commit subjects per release, written by `scripts/generate-release-notes.sh` and
 compiled into the binary: the "What's new" dialog reads the section matching the
 running version. Only `## <version>` headings and `- ` lines are parsed.
 
+## 1.0.19
+- Add Start with system option for Windows and Linux
+- Flag screen capture stuck waiting on the portal
+
 ## 1.0.18
 - Color M+ results, keep new recordings visible, restore maximized after fullscreen
 
