@@ -48,7 +48,9 @@ build_clapper() {
 }
 
 # The app only stream-copies (finalize, clip, measure), so one static
-# ffmpeg.exe with the few formats it touches is enough.
+# ffmpeg.exe with the few formats it touches is enough. The decoders are for
+# probing: without AAC an MPEG-TS input has no sample rate and the MP4 header
+# fails.
 build_ffmpeg() {
     [ -f "$work/ffmpeg/ffmpeg.exe" ] && return
     fetch https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.0.1.tar.gz \
@@ -58,7 +60,7 @@ build_ffmpeg() {
     (
         cd "$work/FFmpeg-n8.0.1"
         ./configure --enable-version3 --enable-static --disable-shared \
-            --disable-debug --disable-doc --disable-network --disable-autodetect \
+            --disable-debug --disable-doc --disable-network --disable-autodetect --enable-small \
             --disable-everything --disable-ffplay --disable-ffprobe --disable-avdevice \
             --disable-swscale --disable-x86asm --enable-protocol=file,pipe \
             --enable-demuxer=concat,matroska,mov,mpegts --enable-muxer=matroska,mp4 \
@@ -72,7 +74,10 @@ build_ffmpeg() {
 }
 
 build_rust() {
-    cargo build --release --manifest-path native/Cargo.toml
+    # The Flatpak manifest sets the same two; they stay out of Cargo.toml so
+    # local release builds remain quick.
+    CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+        cargo build --release --manifest-path native/Cargo.toml
     cargo build --release --manifest-path wr-capture/Cargo.toml
 }
 
