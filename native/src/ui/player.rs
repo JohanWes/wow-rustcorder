@@ -806,25 +806,44 @@ impl Inner {
 
     /// Playback failure has no supported error signal in the bindings; if the
     /// player still is not ready shortly after a load, surface the one
-    /// recovery row. A later successful load hides it again.
+    /// recovery row. A load can also just be slow (the first one after a
+    /// Windows install takes longer than that), so the watch goes on and
+    /// takes the row away again once the player is ready.
     ///
     /// The check belongs to the load that armed it: without the generation a
     /// slow first load would be blamed on whatever the user selected next.
     fn watch_for_failure(self: &Rc<Self>, generation: u64) {
+        const TICK: std::time::Duration = std::time::Duration::from_millis(500);
+        const FLAG_AFTER_TICKS: u32 = 8;
+        const GIVE_UP_AFTER_TICKS: u32 = 120;
         let this = Rc::clone(self);
-        gtk4::glib::timeout_add_local_once(std::time::Duration::from_secs(4), move || {
-            if this.load_generation.get() != generation {
-                return;
+        let ticks = Cell::new(0_u32);
+        gtk4::glib::timeout_add_local(TICK, move || {
+            if this.load_generation.get() != generation || this.active_id.borrow().is_none() {
+                return gtk4::glib::ControlFlow::Break;
             }
-            let ready = this.backend().is_some_and(PlayerBackend::is_ready);
-            if !ready && this.active_id.borrow().is_some() {
+            let flagged = ticks.get() >= FLAG_AFTER_TICKS;
+            if this.backend().is_some_and(PlayerBackend::is_ready) {
+                if flagged {
+                    tracing::info!("media ready after a slow load");
+                    this.set_media_usable(true, this.active_entry_is_clip());
+                    this.error_bar.set_visible(false);
+                }
+                return gtk4::glib::ControlFlow::Break;
+            }
+            ticks.set(ticks.get() + 1);
+            if ticks.get() == FLAG_AFTER_TICKS {
                 tracing::warn!(
                     state = ?this.backend().map(PlayerBackend::state),
                     "media not ready 4 s after loading"
                 );
-                let is_clip = this.active_entry_is_clip();
-                this.set_media_usable(false, is_clip);
+                this.set_media_usable(false, this.active_entry_is_clip());
                 this.error_bar.set_visible(true);
+            }
+            if ticks.get() >= GIVE_UP_AFTER_TICKS {
+                gtk4::glib::ControlFlow::Break
+            } else {
+                gtk4::glib::ControlFlow::Continue
             }
         });
     }
