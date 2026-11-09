@@ -298,13 +298,8 @@ fn register_ui_resources() {
 /// it the damage meter shows no spell icons or tooltips. Called from `run`,
 /// after logging is up and only in the primary instance.
 fn register_spell_resources() {
-    let installed = std::env::current_exe()
-        .ok()
-        .and_then(|exe| Some(exe.parent()?.parent()?.join("share")))
-        .unwrap_or_else(|| "/app/share".into())
-        .join("warcraft-rustcorder/spells.gresource");
     let spells = [
-        installed,
+        installed_spell_bundle(),
         concat!(env!("OUT_DIR"), "/spells.gresource").into(),
     ]
     .into_iter()
@@ -313,6 +308,14 @@ fn register_spell_resources() {
         Some(resource) => gtk4::gio::resources_register(&resource),
         None => tracing::warn!("spell resource bundle not found; spell icons disabled"),
     }
+}
+
+fn installed_spell_bundle() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.parent()?.join("share")))
+        .unwrap_or_else(|| "/app/share".into())
+        .join("warcraft-rustcorder/spells.gresource")
 }
 
 /// Hand activation to the primary instance on the session bus. The remote

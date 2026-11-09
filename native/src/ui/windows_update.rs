@@ -6,6 +6,10 @@
 //! ships with Windows behind a progress dialog, checks its hash, quits the way
 //! the tray's Quit does, and `main.rs` then runs the installer invisibly. The
 //! installer starts the new version.
+//!
+//! A release also publishes an update package: the same installer without the
+//! spell bundle, a third of the download, which rarely changes. The app takes
+//! it when its installed bundle is the one the release ships.
 
 use std::cell::RefCell;
 use std::ffi::OsString;
@@ -36,6 +40,17 @@ struct Latest {
     /// Installer bytes for the progress bar; 0 when the manifest predates it.
     #[serde(default)]
     size: u64,
+    /// Absent in older manifests.
+    update: Option<UpdatePackage>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct UpdatePackage {
+    url: String,
+    sha256: String,
+    size: u64,
+    /// The spell bundle this package expects to find installed.
+    spells_sha256: String,
 }
 
 /// The verified installer, run by `run_pending_installer` after the app quit.
@@ -277,7 +292,11 @@ fn fetch_latest() -> Result<Option<Latest>, String> {
     let (body, code) = text.rsplit_once('\n').unwrap_or(("", &text));
     match code.trim() {
         "200" => {
-            let latest: Latest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+            let mut latest: Latest =
+                serde_json::from_str(body).map_err(|error| error.to_string())?;
+            if is_newer(&latest.version, env!("CARGO_PKG_VERSION")) {
+                prefer_update_package(&mut latest);
+            }
             if !latest.url.starts_with(RELEASE_PREFIX) || latest.url.contains("..") {
                 return Err(format!(
                     "the update manifest points outside the project's releases: {}",
@@ -288,6 +307,22 @@ fn fetch_latest() -> Result<Option<Latest>, String> {
         }
         "404" => Ok(None),
         code => Err(format!("the update server answered HTTP {code}")),
+    }
+}
+
+/// Download the update package instead of the full installer when the
+/// installed spell bundle is the one it was built against.
+fn prefer_update_package(latest: &mut Latest) {
+    let Some(update) = latest.update.take() else {
+        return;
+    };
+    let fits = sha256(&super::installed_spell_bundle())
+        .is_ok_and(|installed| installed.eq_ignore_ascii_case(update.spells_sha256.trim()));
+    tracing::info!(fits, "update package offered");
+    if fits {
+        latest.url = update.url;
+        latest.sha256 = update.sha256;
+        latest.size = update.size;
     }
 }
 

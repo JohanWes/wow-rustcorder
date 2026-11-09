@@ -13,7 +13,8 @@
 #
 # Clapper and a minimal FFmpeg are built once and cached in build-windows/;
 # the app folder lands in build-windows/app and the installer beside it,
-# with bundle-files.txt listing every shipped file and its size.
+# with bundle-files.txt listing every shipped file and its size. The update
+# package next to it is the installer without the spell bundle.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -203,19 +204,24 @@ licenses() {
 installer() {
     local iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
     [ -x "$iscc" ] || iscc=$(command -v ISCC.exe)
-    "$iscc" -Q "-DAppVersion=$version" "-DAppDir=$(cygpath -w "$app")" \
-        "-DOutputDir=$(cygpath -w "$work")" "$(cygpath -w windows/installer.iss)"
+    local args=(-Q "-DAppVersion=$version" "-DAppDir=$(cygpath -w "$app")"
+        "-DOutputDir=$(cygpath -w "$work")")
+    spells_sha=$(sha256sum "$app/share/warcraft-rustcorder/spells.gresource" | cut -d' ' -f1)
+    "$iscc" "${args[@]}" "$(cygpath -w windows/installer.iss)"
+    "$iscc" "${args[@]}" -DUpdateOnly "-DSpellsSha256=$spells_sha" "$(cygpath -w windows/installer.iss)"
 }
 
-# The update manifest the app reads once it is copied to GitHub Pages.
+# The update manifest the app reads once it is copied to GitHub Pages. Apps
+# up to 1.0.19 read only the top-level installer fields.
 manifest() {
-    local file=WarcraftRustcorder-$version-setup.exe
-    local sum size
-    sum=$(sha256sum "$work/$file" | cut -d' ' -f1)
-    size=$(stat -c%s "$work/$file")
-    printf '{"version":"%s","url":"%s","sha256":"%s","size":%s}\n' "$version" \
-        "https://github.com/JohanWes/wow-rustcorder/releases/download/v$version/$file" \
-        "$sum" "$size" >"$work/latest.json"
+    package() { # file: its url, sha256 and size as JSON members
+        printf '"url":"%s","sha256":"%s","size":%s' \
+            "https://github.com/JohanWes/wow-rustcorder/releases/download/v$version/$1" \
+            "$(sha256sum "$work/$1" | cut -d' ' -f1)" "$(stat -c%s "$work/$1")"
+    }
+    printf '{"version":"%s",%s,"update":{%s,"spells_sha256":"%s"}}\n' "$version" \
+        "$(package "WarcraftRustcorder-$version-setup.exe")" \
+        "$(package "WarcraftRustcorder-$version-update.exe")" "$spells_sha" >"$work/latest.json"
 }
 
 build_clapper

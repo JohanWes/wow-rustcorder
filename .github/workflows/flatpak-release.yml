@@ -178,6 +178,7 @@ jobs:
           name: warcraft-rustcorder-windows
           path: |
             build-windows/WarcraftRustcorder-*-setup.exe
+            build-windows/WarcraftRustcorder-*-update.exe
             build-windows/latest.json
             build-windows/bundle-files.txt
           if-no-files-found: error
@@ -209,7 +210,9 @@ jobs:
         uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
-          files: windows/WarcraftRustcorder-*-setup.exe
+          files: |
+            windows/WarcraftRustcorder-*-setup.exe
+            windows/WarcraftRustcorder-*-update.exe
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -225,6 +228,7 @@ jobs:
             printf -- '- **Windows:** download `WarcraftRustcorder-%s-setup.exe` below and run it.\n' "$version"
             sha=$(sha256sum windows/WarcraftRustcorder-*-setup.exe | cut -d' ' -f1)
             printf -- '  [VirusTotal scan](https://www.virustotal.com/gui/file/%s)\n' "$sha"
+            printf -- '  `WarcraftRustcorder-%s-update.exe` is only for the in-app updater.\n' "$version"
             printf -- '- **Linux:** install the Flatpak as described in the [README](https://github.com/JohanWes/wow-rustcorder#install).\n\n'
             cat notes.md
           } > notes-full.md
@@ -236,4 +240,5 @@ jobs:
             candidate/warcraft-rustcorder.flatpak \
             candidate/warcraft-rustcorder.flatpak.sha256 \
             windows/WarcraftRustcorder-*-setup.exe \
+            windows/WarcraftRustcorder-*-update.exe \
             windows/latest.json

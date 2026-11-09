@@ -136,8 +136,8 @@ intentional.
 ## Windows
 
 The tag job also builds `WarcraftRustcorder-<version>-setup.exe` (Inno Setup,
-per-user, no admin) and `latest.json` on a Windows runner with
-`windows/build.sh`, and attaches both to the GitHub release. The publish job
+per-user, no admin), the update package and `latest.json` on a Windows runner
+with `windows/build.sh`, and attaches them to the GitHub release. The publish job
 uploads the installer to VirusTotal and links its report in the release notes;
 the API key is `VT_API_KEY` in the `release` environment. The installer is
 not code-signed yet, so SmartScreen warns on first run.
@@ -147,6 +147,13 @@ Installed apps check
 startup and from "Check for updates", then download the installer, verify its
 SHA-256, and run it silently. `pages.yml` deploys that file together with the
 Flatpak repo when the release is published.
+
+The build also produces `WarcraftRustcorder-<version>-update.exe`, the same
+installer without the spell bundle (about a third smaller). `latest.json`
+lists it under `update` with the SHA-256 of the spell bundle it expects; an
+app whose installed bundle has that hash downloads it instead, and any other
+gets the full installer. Run by hand over a different bundle it refuses to
+install.
 
 To build locally, run `bash windows/build.sh` in an MSYS2 UCRT64 shell with
 the packages listed at the top of the script and Inno Setup 6. Output lands in
