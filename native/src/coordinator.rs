@@ -49,6 +49,9 @@ const CLASSIC_DATA_TIMEOUT_MS: i64 = 2 * 60_000;
 /// recently; `gx.log` alone gets a GPU status report every 5 minutes.
 const WOW_IDLE_MS: i64 = 10 * 60_000;
 const WOW_CHECK_INTERVAL: Duration = Duration::from_secs(5);
+/// Standby ticks are this many times slower than `Setup::poll_interval`:
+/// about one a second instead of twenty.
+const STANDBY_POLL_FACTOR: u32 = 20;
 /// Commands handled per tick before the loop returns to polling.
 const COMMAND_BATCH: usize = 16;
 /// Bounded problem list surfaced in the snapshot.
@@ -519,7 +522,7 @@ impl Coordinator {
     /// Blocking-with-timeout command drain; the timeout is the idle pacing.
     /// Returns `true` when shutdown was requested.
     fn drain_commands(&mut self) -> bool {
-        let first = match self.commands.recv_timeout(self.setup.poll_interval) {
+        let first = match self.commands.recv_timeout(self.idle_wait()) {
             Ok(command) => Some(command),
             Err(RecvTimeoutError::Timeout) => None,
             // The GTK side is gone: stop exactly like an explicit Shutdown.
@@ -540,6 +543,24 @@ impl Coordinator {
             self.handle_command(command);
         }
         false
+    }
+
+    /// How long a tick waits for a command. In standby WoW is not running and
+    /// only the periodic check for it has anything to notice, so the log
+    /// folders are not polled at full rate; in the Flatpak every poll goes
+    /// through the document portal. A command still wakes the tick at once.
+    fn idle_wait(&self) -> Duration {
+        let quiet = self.standby
+            && !self.armed
+            && self.media_busy.is_none()
+            && self.finalize_queue.is_empty()
+            && self.user_queue.is_empty()
+            && self.pending_snapshot.is_none();
+        if quiet {
+            self.setup.poll_interval * STANDBY_POLL_FACTOR
+        } else {
+            self.setup.poll_interval
+        }
     }
 
     // --- Commands ---
