@@ -49,8 +49,6 @@ modules:
       - install -Dm644 data/io.github.JohanWes.WarcraftRustcorder.Devel.desktop /app/share/applications/io.github.JohanWes.WarcraftRustcorder.Devel.desktop
       - install -Dm644 data/io.github.JohanWes.WarcraftRustcorder.Devel.metainfo.xml /app/share/metainfo/io.github.JohanWes.WarcraftRustcorder.Devel.metainfo.xml
       - install -Dm644 data/icons/io.github.JohanWes.WarcraftRustcorder.Devel.svg /app/share/icons/hicolor/scalable/apps/io.github.JohanWes.WarcraftRustcorder.Devel.svg
-      - install -Dm644 data/io.github.JohanWes.WarcraftRustcorder.Devel.gschema.xml /app/share/glib-2.0/schemas/io.github.JohanWes.WarcraftRustcorder.Devel.gschema.xml
-      - glib-compile-schemas /app/share/glib-2.0/schemas
     sources:
       - type: dir
         path: ../native

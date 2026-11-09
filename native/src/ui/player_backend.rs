@@ -214,7 +214,6 @@ impl PlayerBackend {
         self.player.connect_seek_done(move |_| callback());
     }
 }
-/// Tunes every multiqueue as it joins a bin. Clapper hides its pipeline, and
 /// Caps every multiqueue as it joins a bin. Clapper hides its pipeline, and
 /// anything of ours it links in (a filter, the sink) only gets there once the
 /// video chain is complete, by which time the source queue of the first
