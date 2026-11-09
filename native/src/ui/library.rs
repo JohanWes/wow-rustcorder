@@ -1160,7 +1160,8 @@ impl Inner {
         // Re-select the surviving rows in one change; rows that kept their
         // object are still selected, so an unchanged selection emits nothing.
         // If none survive (a fresh category, or the selection was deleted or
-        // filtered out) open the newest by default.
+        // filtered out) nothing is selected: a recording only loads, with its
+        // decoder and video memory, once the user picks one.
         let visible = self.selection.n_items();
         let wanted = gtk4::Bitset::new_empty();
         for index in 0..visible {
@@ -1169,9 +1170,6 @@ impl Inner {
             {
                 wanted.add(index);
             }
-        }
-        if wanted.is_empty() && visible > 0 {
-            wanted.add(0);
         }
         if wanted.is_empty() {
             // Removing rows does not emit `selection-changed`, so unload a

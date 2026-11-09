@@ -98,9 +98,6 @@ struct Inner {
 
     media_usable: Cell<bool>,
     playing: Cell<bool>,
-    /// False until the first load: the recording selected at startup opens
-    /// paused, later selections play.
-    autoplay: Cell<bool>,
     speed_index: Cell<usize>,
     muted: Cell<bool>,
     position_seconds: Cell<f64>,
@@ -295,7 +292,6 @@ impl Player {
             deferred_selection: RefCell::new(None),
             media_usable: Cell::new(false),
             playing: Cell::new(false),
-            autoplay: Cell::new(false),
             speed_index: Cell::new(2),
             muted: Cell::new(false),
             position_seconds: Cell::new(0.0),
@@ -722,18 +718,11 @@ impl Inner {
         backend.set_volume(self.volume_scale.value());
         backend.set_muted(self.muted.get());
         self.set_media_usable(true, is_clip);
-        let autoplay = self.autoplay.replace(true);
-        if autoplay {
-            backend.play();
-        } else {
-            backend.pause();
-        }
-        self.playing.set(autoplay);
-        self.play_button.set_icon_name(if autoplay {
-            "media-playback-pause-symbolic"
-        } else {
-            "media-playback-start-symbolic"
-        });
+        // Every load follows a pick by the user, so it plays.
+        backend.play();
+        self.playing.set(true);
+        self.play_button
+            .set_icon_name("media-playback-pause-symbolic");
         if retain_position {
             let position = self.position_seconds.get();
             self.request_seek(position, SeekMode::Settle);
