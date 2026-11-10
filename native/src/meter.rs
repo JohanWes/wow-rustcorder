@@ -165,8 +165,13 @@ impl RawFight {
     }
 
     fn actor(&mut self, guid: &str, name: &str) -> &mut RawActor {
-        if let Some(position) = self.actor_index.get(guid) {
-            return &mut self.actors[*position];
+        if let Some(&position) = self.actor_index.get(guid) {
+            let actor = &mut self.actors[position];
+            // A support or buff row can precede the unit's own first event.
+            if actor.name.is_empty() {
+                actor.name = name.to_owned();
+            }
+            return actor;
         }
         self.actor_index.insert(guid.to_owned(), self.actors.len());
         self.actors.push(RawActor {
@@ -1047,7 +1052,11 @@ fn merged_actors(
                     .or_else(|| names.get(resolved).cloned())
                     .unwrap_or_else(|| raw.name.clone())
             } else if raw.name.is_empty() {
-                names.get(resolved).cloned().unwrap_or_default()
+                // A supporter outside the group is never named by the log.
+                names
+                    .get(resolved)
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown".to_owned())
             } else {
                 raw.name.clone()
             };
