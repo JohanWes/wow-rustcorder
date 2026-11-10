@@ -137,9 +137,10 @@ pub fn x_to_ms(x: f64, duration_ms: u64, width: f64) -> u64 {
 /// `(start_ms, end_ms, label)` of one visible item, for tooltip hit-testing.
 pub type LabelledItem = (u64, Option<u64>, Option<String>);
 
-/// The hover/focus label: the nearest visible item within `radius_px` of `x`
-/// (a span counts as zero distance from anywhere inside it), with its
-/// timestamp.
+/// The hover/focus label: the nearest point marker within `radius_px` of `x`
+/// with its own time, otherwise the labelled span under `x` with the time at
+/// `x`. Spans cover most of a recording, so their own start would hide both
+/// the markers inside them and where a click is going to land.
 pub fn hover_label(
     items: &[LabelledItem],
     x: f64,
@@ -147,30 +148,24 @@ pub fn hover_label(
     width: f64,
     radius_px: f64,
 ) -> Option<String> {
-    let mut best: Option<(f64, &LabelledItem)> = None;
-    for item in items {
-        let start_x = ms_to_x(item.0, duration_ms, width);
-        let distance = match item.1 {
-            Some(end_ms) => {
-                let end_x = ms_to_x(end_ms, duration_ms, width);
-                if x >= start_x && x <= end_x {
-                    0.0
-                } else {
-                    (x - start_x).abs().min((x - end_x).abs())
-                }
-            }
-            None => (x - start_x).abs(),
-        };
-        if distance <= radius_px && best.is_none_or(|(best_distance, _)| distance < best_distance) {
-            best = Some((distance, item));
-        }
-    }
-    best.map(|(_, (start_ms, _, label))| {
+    let at_x = |ms: u64| ms_to_x(ms, duration_ms, width);
+    let marker = items
+        .iter()
+        .filter(|(_, end_ms, _)| end_ms.is_none())
+        .map(|item| ((x - at_x(item.0)).abs(), item))
+        .filter(|(distance, _)| *distance <= radius_px)
+        .min_by(|left, right| left.0.total_cmp(&right.0));
+    if let Some((_, (start_ms, _, label))) = marker {
         let time = format_clock(*start_ms);
-        match label {
+        return Some(match label {
             Some(label) => format!("{label} - {time}"),
             None => time,
-        }
+        });
+    }
+    let time = format_clock(x_to_ms(x, duration_ms, width));
+    items.iter().find_map(|(start_ms, end_ms, label)| {
+        let inside = x >= at_x(*start_ms) && x <= at_x((*end_ms)?);
+        inside.then_some(format!("{} - {time}", label.as_ref()?))
     })
 }
 
@@ -741,12 +736,22 @@ mod tests {
             hover_label(&items, x, 120_000, 600.0, 8.0).as_deref(),
             Some("Alice - 0:30")
         );
-        // A span reports zero distance from anywhere inside it.
-        let items = vec![(0, Some(120_000), Some("Round 1".to_owned()))];
+        // Inside a span the time is the pointer's, and a marker in it wins.
+        let items = vec![
+            (0, Some(120_000), Some("Round 1".to_owned())),
+            (90_000, None, Some("Alice".to_owned())),
+        ];
         assert_eq!(
             hover_label(&items, 300.0, 120_000, 600.0, 8.0).as_deref(),
-            Some("Round 1 - 0:00")
+            Some("Round 1 - 1:00")
         );
+        assert_eq!(
+            hover_label(&items, 452.0, 120_000, 600.0, 8.0).as_deref(),
+            Some("Alice - 1:30")
+        );
+        // An unlabelled span (Mythic+ trash) leaves the plain time to the caller.
+        let items = vec![(0, Some(120_000), None)];
+        assert_eq!(hover_label(&items, 300.0, 120_000, 600.0, 8.0), None);
     }
 
     #[test]

@@ -884,7 +884,8 @@ impl Settings {
 
         let dialog = adw::Dialog::new();
         dialog.set_title("Settings");
-        dialog.set_content_width(760);
+        // Wide enough that the four switcher tabs show their full titles.
+        dialog.set_content_width(840);
         dialog.set_content_height(680);
         dialog.set_child(Some(&toolbar_view));
 

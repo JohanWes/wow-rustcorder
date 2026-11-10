@@ -98,6 +98,9 @@ struct Inner {
 
     media_usable: Cell<bool>,
     playing: Cell<bool>,
+    /// Playback ran into the end of the recording, so the next play starts
+    /// over. Any seek or load clears it.
+    ended: Cell<bool>,
     speed_index: Cell<usize>,
     muted: Cell<bool>,
     position_seconds: Cell<f64>,
@@ -188,8 +191,16 @@ impl Player {
         volume_scale.update_property(&[gtk4::accessible::Property::Label("Volume")]);
         let time_label = gtk4::Label::new(Some("0:00 / 0:00"));
         time_label.add_css_class("numeric");
+        // The label keeps the width `reserve_time_label` gives it; the
+        // position grows leftwards and the duration stays put.
+        time_label.set_xalign(1.0);
         let speed_button = gtk4::Button::with_label("1x");
         speed_button.set_tooltip_text(Some("Playback speed"));
+        // Room for the widest speed, so cycling speeds does not move the
+        // button under the pointer or resize the seek track.
+        if let Some(label) = speed_button.child().and_downcast::<gtk4::Label>() {
+            label.set_width_chars(5);
+        }
         let previous_marker_button = icon_button("media-skip-backward-symbolic", "Previous marker");
         let next_marker_button = icon_button("media-skip-forward-symbolic", "Next marker");
         previous_marker_button.set_sensitive(false);
@@ -292,6 +303,7 @@ impl Player {
             deferred_selection: RefCell::new(None),
             media_usable: Cell::new(false),
             playing: Cell::new(false),
+            ended: Cell::new(false),
             speed_index: Cell::new(2),
             muted: Cell::new(false),
             position_seconds: Cell::new(0.0),
@@ -679,6 +691,7 @@ impl Inner {
         self.load_generation.set(generation);
         self.seek_in_flight.set(false);
         self.pending_seek.set(None);
+        self.ended.set(false);
         self.load_meter(id.clone(), sidecar_path, generation);
 
         self.error_bar.set_visible(false);
@@ -688,9 +701,7 @@ impl Inner {
             if replacing_media && let Some(backend) = self.backend() {
                 backend.stop();
             }
-            self.playing.set(false);
-            self.play_button
-                .set_icon_name("media-playback-start-symbolic");
+            self.set_playing(false);
             self.placeholder.set_title("Recording unavailable");
             self.placeholder
                 .set_description(Some("The media file is empty."));
@@ -720,9 +731,7 @@ impl Inner {
         self.set_media_usable(true, is_clip);
         // Every load follows a pick by the user, so it plays.
         backend.play();
-        self.playing.set(true);
-        self.play_button
-            .set_icon_name("media-playback-pause-symbolic");
+        self.set_playing(true);
         if retain_position {
             let position = self.position_seconds.get();
             self.request_seek(position, SeekMode::Settle);
@@ -855,11 +864,12 @@ impl Inner {
         }
         *self.active_id.borrow_mut() = None;
         self.povs.borrow_mut().clear();
-        self.playing.set(false);
+        self.set_playing(false);
         self.load_generation
             .set(self.load_generation.get().wrapping_add(1));
         self.seek_in_flight.set(false);
         self.pending_seek.set(None);
+        self.ended.set(false);
         self.position_seconds.set(0.0);
         self.duration_ms.set(0);
         self.show_position(0.0);
@@ -900,7 +910,10 @@ impl Inner {
             return;
         }
         let playing = !self.playing.get();
-        self.playing.set(playing);
+        self.set_playing(playing);
+        if playing && self.ended.get() {
+            self.request_seek(0.0, SeekMode::Settle);
+        }
         if let Some(backend) = self.backend() {
             if playing {
                 backend.play();
@@ -909,6 +922,11 @@ impl Inner {
             }
             self.check_play_state(playing);
         }
+    }
+
+    /// The one place the transport state is recorded and shown on the button.
+    fn set_playing(&self, playing: bool) {
+        self.playing.set(playing);
         self.play_button.set_icon_name(if playing {
             "media-playback-pause-symbolic"
         } else {
@@ -949,6 +967,7 @@ impl Inner {
             return;
         }
         let seconds = seconds.clamp(0.0, self.duration_ms.get() as f64 / 1_000.0);
+        self.ended.set(false);
         self.show_position(seconds);
         let Some(backend) = self.backend() else {
             return;
@@ -1033,10 +1052,18 @@ impl Inner {
     fn on_state_changed(self: &Rc<Self>, state: PlayerState) {
         tracing::info!(?state, "player state");
         match state {
-            // First readiness of the loaded item: hand over a seek that was
-            // queued during loading. Clapper executes it and reports a
-            // completion of its own.
             PlayerState::Playing | PlayerState::Paused => {
+                // Clapper pauses on its own when the recording ends. Following
+                // its state keeps the button truthful, so one press plays
+                // again instead of first "pausing" what already stopped. A
+                // pause nobody asked for is that end (or a load's first
+                // state, which the Playing right behind it clears again).
+                self.ended
+                    .set(state == PlayerState::Paused && self.playing.get());
+                self.set_playing(state == PlayerState::Playing);
+                // First readiness of the loaded item: hand over a seek that
+                // was queued during loading. Clapper executes it and reports
+                // a completion of its own.
                 if let Some((target, mode)) = self.pending_seek.take() {
                     self.seek_in_flight.set(true);
                     self.issue_seek(target, mode);
@@ -1091,13 +1118,42 @@ impl Inner {
         self.timeline.set_position(position_ms);
         self.meter.set_position(position_ms);
         let rendered = (position_ms / 1_000, duration_ms);
-        if self.time_label_state.replace(Some(rendered)) != Some(rendered) {
+        let previous = self.time_label_state.replace(Some(rendered));
+        if previous != Some(rendered) {
+            let duration = super::format_clock(duration_ms);
+            if previous.is_none_or(|(_, previous_duration)| previous_duration != duration_ms) {
+                self.reserve_time_label(&duration);
+            }
+            // The media can run a moment past the sidecar's duration; the
+            // clock stops at it instead of reading "1:18 / 1:17".
             self.time_label.set_text(&format!(
-                "{} / {}",
-                super::format_clock(position_ms),
-                super::format_clock(duration_ms),
+                "{} / {duration}",
+                super::format_clock(position_ms.min(duration_ms))
             ));
         }
+    }
+
+    /// Give the clock the width of its longest text for this recording. The
+    /// seek track takes whatever the row has left, so a clock that grew a
+    /// digit at 10:00 or 1:00:00 would shrink the track under the pointer and
+    /// make that exact spot impossible to drag to.
+    fn reserve_time_label(&self, duration: &str) {
+        // The shown position never exceeds the duration, and digits are
+        // tabular, so the duration's own shape in zeros is the widest text.
+        let widest: String = duration
+            .chars()
+            .map(|character| {
+                if character.is_ascii_digit() {
+                    '0'
+                } else {
+                    character
+                }
+            })
+            .collect();
+        self.time_label.set_size_request(-1, -1);
+        self.time_label.set_text(&format!("{widest} / {widest}"));
+        let (_, natural, _, _) = self.time_label.measure(gtk4::Orientation::Horizontal, -1);
+        self.time_label.set_size_request(natural, -1);
     }
 
     fn handle_key(self: &Rc<Self>, keyval: gtk4::gdk::Key) -> gtk4::glib::Propagation {
