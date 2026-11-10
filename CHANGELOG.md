@@ -7,6 +7,22 @@ Notable changes to the native Linux/Wayland application. The format follows
 Release history before the native rewrite belongs to the upstream Electron
 project, [aza547/wow-recorder](https://github.com/aza547/wow-recorder).
 
+## 1.0.20 - 2026-11-10
+
+### Changed
+- A recording loads only when you pick it in the library.
+- Log folders are polled once a second while WoW is not running.
+- Windows: smaller app build and a smaller update package without the spell
+  bundle; AAC audio is decoded with faad instead of Media Foundation.
+
+### Fixed
+- Recordings whose video file is already gone can be deleted.
+- Abandoned keystones, raid names, keystone timers and log time zones.
+- Meter rows the combat log leaves without a name now get one.
+- The playback error clears once a slow load becomes ready.
+- The player clock keeps a fixed width; hover time shows at the pointer.
+- Missing config keys inside a settings group fall back to defaults.
+
 ## 1.0.19 - 2026-11-03
 
 ### Added

@@ -37,6 +37,16 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.0.20" date="2026-11-10">
+      <description>
+        <p>
+          Recordings load only when picked, playback errors clear once a slow
+          load finishes, and recordings whose video is gone can be deleted.
+          Fixes for abandoned keystones, raid names, keystone timers, log time
+          zones and unnamed meter rows. Smaller, faster Windows updates.
+        </p>
+      </description>
+    </release>
     <release version="1.0.19" date="2026-11-03">
       <description>
         <p>

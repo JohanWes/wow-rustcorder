@@ -4,6 +4,20 @@ Commit subjects per release, written by `scripts/generate-release-notes.sh` and
 compiled into the binary: the "What's new" dialog reads the section matching the
 running version. Only `## <version>` headings and `- ` lines are parsed.
 
+## 1.0.20
+- Poll log folders once a second while WoW is not running
+- Remove the unused Devel GSettings schema and a duplicated comment
+- Build the Windows app with LTO and a size-optimized FFmpeg
+- Add a Windows update package that leaves out the spell bundle
+- Load a recording only when the user picks one
+- Clear the playback error once a slow load becomes ready
+- Decode AAC with faad instead of Media Foundation on Windows
+- Default config keys that are missing inside a settings group
+- Name meter rows the combat log leaves without a name
+- Keep the player clock width fixed and show hover time at the pointer
+- Fix abandoned keys, log time zones, raid names and keystone timers
+- Delete recordings whose video file is already gone
+
 ## 1.0.19
 - Add Start with system option for Windows and Linux
 - Flag screen capture stuck waiting on the portal
