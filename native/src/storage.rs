@@ -189,7 +189,10 @@ impl Storage {
                 continue;
             }
             match self.load_sidecar(&path) {
-                Ok(entry) => entries.push(entry),
+                Ok(mut entry) => {
+                    name_raid(&mut entry.details);
+                    entries.push(entry);
+                }
                 Err(reason) => index.skipped.push(SkippedEntry {
                     sidecar_path: path,
                     reason,
@@ -1321,6 +1324,23 @@ fn legacy_outcome(category: &Category, result: bool) -> Outcome {
                 Outcome::Loss
             }
         }
+    }
+}
+
+/// Recordings made before their raid joined the table were stored without
+/// its name; the encounter id still tells which raid it was.
+fn name_raid(details: &mut ActivityDetails) {
+    if let ActivityDetails::Raid {
+        zone_name,
+        encounter_id: Some(encounter_id),
+        ..
+    } = details
+        && zone_name
+            .as_deref()
+            .is_none_or(|name| name == "Unknown Raid")
+        && let Some(name) = crate::activity::raid_short_name(*encounter_id)
+    {
+        *zone_name = Some(name.to_owned());
     }
 }
 

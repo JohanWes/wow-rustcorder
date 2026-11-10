@@ -17,6 +17,8 @@ pub struct ParsedEvent {
 pub enum CombatEvent {
     ZoneChanged {
         zone_id: u32,
+        /// 0 outside instances and when the line carries none.
+        difficulty_id: u32,
     },
     EncounterStarted {
         encounter_id: u32,
@@ -223,6 +225,7 @@ pub fn parse_line(
     let event = match event_name {
         "ZONE_CHANGE" => CombatEvent::ZoneChanged {
             zone_id: number(&fields, 1)?,
+            difficulty_id: optional_number(&fields, 3)?.unwrap_or(0),
         },
         "ENCOUNTER_START" => CombatEvent::EncounterStarted {
             encounter_id: number(&fields, 1)?,
@@ -827,19 +830,28 @@ pub(crate) fn parse_timestamp(value: &str, context: ParseTimeContext) -> Result<
     let (whole_time, raw_fraction) = time
         .split_once('.')
         .ok_or(ParseFailure::MalformedTimestamp)?;
-    // Newer combat logs append a UTC-offset suffix directly onto the
-    // milliseconds field with no separating character (e.g. "038-4" for
-    // milliseconds=038, offset=-4). Strip it before validating/parsing the
-    // fractional-second digits. The offset itself is intentionally ignored
-    // here; timestamps continue to be interpreted using the caller-supplied
-    // `context.utc_offset_minutes`, matching prior (no-offset-suffix) logs.
-    let fraction = match raw_fraction.find(['+', '-']) {
-        Some(index) => &raw_fraction[..index],
-        None => raw_fraction,
-    };
+    // Newer combat logs append the writer's UTC offset in whole hours directly
+    // onto the three millisecond digits: "038-4" west of UTC, "4481" (448 ms,
+    // UTC+1) east of it. The line's own offset is what its local time was
+    // written in, so it wins over the caller's: that one is read once at
+    // startup and goes stale across a DST change while the app keeps running.
+    // Logs without one, or with anything that is not an hour, use the caller's.
+    // So does a system set to a zone off the hour (India, central Australia):
+    // what the game writes there is unknown, and the caller's was right before.
+    let sign_at = raw_fraction.find(['+', '-']);
+    let fraction = &raw_fraction[..sign_at.unwrap_or(raw_fraction.len())];
     if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(ParseFailure::MalformedTimestamp);
     }
+    let offset = match sign_at {
+        Some(index) => &raw_fraction[index..],
+        None => fraction.get(3..).unwrap_or_default(),
+    };
+    let utc_offset_minutes = offset
+        .parse::<i32>()
+        .ok()
+        .filter(|hours| (-12..=14).contains(hours) && context.utc_offset_minutes % 60 == 0)
+        .map_or(context.utc_offset_minutes, |hours| hours * 60);
     let mut time_parts = whole_time.split(':');
     let mut time_part = || time_parts.next().map(str::parse::<i64>).transpose();
     let (Ok(Some(hour)), Ok(Some(minute)), Ok(Some(second)), Ok(None)) =
@@ -862,10 +874,11 @@ pub(crate) fn parse_timestamp(value: &str, context: ParseTimeContext) -> Result<
         .fold(0_i64, |value, digit| value * 10 + i64::from(digit - b'0'))
         * 10_i64.pow(3 - digits.len() as u32);
     let days = days_from_civil(year, month, day);
-    Ok((days * 86_400 + hour * 3_600 + minute * 60 + second
-        - i64::from(context.utc_offset_minutes) * 60)
-        * 1_000
-        + milliseconds)
+    Ok(
+        (days * 86_400 + hour * 3_600 + minute * 60 + second - i64::from(utc_offset_minutes) * 60)
+            * 1_000
+            + milliseconds,
+    )
 }
 
 fn days_in_month(year: i32, month: i32) -> i32 {
@@ -921,7 +934,10 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let golden = vec![
-            CombatEvent::ZoneChanged { zone_id: 2652 },
+            CombatEvent::ZoneChanged {
+                zone_id: 2652,
+                difficulty_id: 23,
+            },
             CombatEvent::ChallengeStarted {
                 zone_id: 2652,
                 map_id: 501,
@@ -1022,7 +1038,10 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let golden = vec![
-            CombatEvent::ZoneChanged { zone_id: 562 },
+            CombatEvent::ZoneChanged {
+                zone_id: 562,
+                difficulty_id: 0,
+            },
             CombatEvent::Combatant {
                 guid: "Player-0-CLASSIC".into(),
                 team_id: None,
@@ -1047,7 +1066,10 @@ mod tests {
                 flags: 0x548,
                 unconscious: false,
             },
-            CombatEvent::ZoneChanged { zone_id: 571 },
+            CombatEvent::ZoneChanged {
+                zone_id: 571,
+                difficulty_id: 0,
+            },
         ];
         let golden = golden
             .into_iter()
@@ -1114,12 +1136,13 @@ mod tests {
                 success: true,
             },
         ];
+        // The lines carry UTC+1, which wins over the context's UTC-5.
         let timestamps = [
-            1_774_400_089_517,
-            1_774_400_089_517,
-            1_774_400_090_517,
-            1_774_400_091_517,
-            1_774_400_092_517,
+            1_774_378_489_517,
+            1_774_378_489_517,
+            1_774_378_490_517,
+            1_774_378_491_517,
+            1_774_378_492_517,
         ];
         let golden = golden
             .into_iter()
@@ -1197,41 +1220,54 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_with_year_and_four_fraction_digits_is_deterministic() {
-        let event = parse_line(
-            GameFlavor::Classic,
-            ParseTimeContext::new(1999, 0),
-            "7/30/2025 23:35:05.5863  ZONE_CHANGE,1007,\"Scholomance\",0",
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(event.occurred_at_ms, 1_753_918_505_586);
+    fn timestamp_uses_the_utc_offset_the_line_carries() {
+        // Every context here is deliberately wrong (a stale year and offset),
+        // as it is after a DST change while the app keeps running.
+        let at = |context, timestamp: &str| {
+            parse_line(
+                GameFlavor::Retail,
+                context,
+                &format!("{timestamp}  ZONE_CHANGE,1,Zone,0"),
+            )
+            .unwrap()
+            .unwrap()
+            .occurred_at_ms
+        };
+        let stale = ParseTimeContext::new(1999, 0);
+        // Real lines from either side of the 2026 switch to winter time:
+        // UTC+2 before it, UTC+1 after, written without a sign.
+        assert_eq!(at(stale, "10/24/2026 13:05:47.7022"), 1_792_839_947_702);
+        assert_eq!(at(CONTEXT, "10/25/2026 15:27:12.2731"), 1_792_938_432_273);
+        // West of UTC the offset is signed.
+        assert_eq!(at(CONTEXT, "8/19/2026 21:00:24.038-4"), 1_787_187_624_038);
+        assert_eq!(at(CONTEXT, "8/19/2026 21:00:24.038+4"), 1_787_158_824_038);
+        assert_eq!(at(stale, "7/30/2025 23:35:05.5863"), 1_753_907_705_586);
     }
 
     #[test]
-    fn timestamp_with_utc_offset_suffix_is_accepted() {
-        // Newer combat logs append a UTC-offset suffix directly onto the
-        // milliseconds field with no separating character, e.g. "038-4" for
-        // milliseconds=038, offset=-4. Confirms the offset suffix is
-        // stripped rather than causing the whole line to be rejected as a
-        // malformed timestamp, and that both "-" and "+" offsets parse.
-        let minus_offset = parse_line(
-            GameFlavor::Retail,
-            CONTEXT,
-            "8/19/2026 21:00:24.038-4  CHALLENGE_MODE_START,\"Den of Nalorakk\",2825,586,10,[162,10,9]",
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(minus_offset.occurred_at_ms, 1_787_166_024_038);
-
-        let plus_offset = parse_line(
-            GameFlavor::Retail,
-            CONTEXT,
-            "8/19/2026 21:00:24.038+4  ZONE_CHANGE,1,Zone,0",
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(plus_offset.occurred_at_ms, 1_787_166_024_038);
+    fn timestamp_without_a_usable_offset_uses_the_context() {
+        let at = |timestamp: &str| {
+            parse_line(
+                GameFlavor::Retail,
+                CONTEXT,
+                &format!("{timestamp}  ZONE_CHANGE,1,Zone,0"),
+            )
+            .unwrap()
+            .unwrap()
+            .occurred_at_ms
+        };
+        // CONTEXT is UTC+2: no suffix, and suffixes that are not an hour.
+        for timestamp in [
+            "8/19/2026 21:00:24.038",
+            "8/19/2026 21:00:24.038456",
+            "8/19/2026 21:00:24.038-99",
+            "8/19/2026 21:00:24.038+",
+        ] {
+            assert_eq!(at(timestamp), 1_787_166_024_038, "{timestamp}");
+        }
+        // A system zone off the hour keeps its own offset whatever the line says.
+        let india = parse_timestamp("8/19/2026 21:00:24.0385", ParseTimeContext::new(2026, 330));
+        assert_eq!(india.unwrap(), 1_787_153_424_038);
     }
 
     #[test]

@@ -106,36 +106,113 @@ static UNKNOWN_RAID: RaidInstance = RaidInstance {
     encounters: &[],
 };
 
+/// Every raid by the encounter ids the game logs, from the client's
+/// `DungeonEncounter` table (zone id = the raid's `AreaTable` row). Classic
+/// clients log the same ids; the trailing 6xx/7xx ids on the Wrath raids are
+/// the ones Wrath Classic logged instead.
 #[rustfmt::skip]
 static RAID_INSTANCES: &[RaidInstance] = &[
-    RaidInstance { zone_id: 13224, name: "Castle Nathria", short_name: "Nathria", encounters: &[2398, 2418, 2402, 2405, 2383, 2406, 2412, 2399, 2417, 2407] },
-    RaidInstance { zone_id: 13561, name: "Sanctum of Domination", short_name: "Sanctum", encounters: &[2523, 2433, 2429, 2432, 2434, 2430, 2436, 2431, 2422, 2435] },
-    RaidInstance { zone_id: 13742, name: "Sepulcher of the First Ones", short_name: "Sepulcher", encounters: &[2537, 2512, 2529, 2539, 2540, 2542, 2543, 2544, 2546, 2549, 2553] },
-    RaidInstance { zone_id: 14030, name: "Vault of the Incarnates", short_name: "Vault", encounters: &[2587, 2639, 2590, 2592, 2635, 2605, 2614, 2607] },
+    // Classic
+    RaidInstance { zone_id: 2159, name: "Onyxia's Lair", short_name: "Onyxia", encounters: &[1084] },
+    RaidInstance { zone_id: 2717, name: "Molten Core", short_name: "Molten Core", encounters: &[663, 664, 665, 666, 667, 668, 669, 670, 671, 672, 3018] },
+    RaidInstance { zone_id: 2677, name: "Blackwing Lair", short_name: "Blackwing Lair", encounters: &[610, 611, 612, 613, 614, 615, 616, 617] },
+    RaidInstance { zone_id: 1977, name: "Zul'Gurub", short_name: "Zul'Gurub", encounters: &[785, 784, 786, 787, 788, 789, 790, 791, 792, 793] },
+    RaidInstance { zone_id: 3429, name: "Ruins of Ahn'Qiraj", short_name: "AQ20", encounters: &[718, 719, 720, 721, 722, 723] },
+    RaidInstance { zone_id: 3428, name: "Temple of Ahn'Qiraj", short_name: "AQ40", encounters: &[709, 710, 711, 712, 713, 714, 715, 716, 717] },
+    RaidInstance { zone_id: 16236, name: "Scarlet Enclave", short_name: "Scarlet Enclave", encounters: &[3185, 3187, 3196, 3186, 3197, 3188, 3190, 3189] },
+    // The Burning Crusade
+    RaidInstance { zone_id: 3457, name: "Karazhan", short_name: "Karazhan", encounters: &[652, 653, 654, 655, 656, 657, 658, 659, 660, 661, 662] },
+    RaidInstance { zone_id: 3923, name: "Gruul's Lair", short_name: "Gruul", encounters: &[649, 650] },
+    RaidInstance { zone_id: 3836, name: "Magtheridon's Lair", short_name: "Magtheridon", encounters: &[651] },
+    RaidInstance { zone_id: 3607, name: "Serpentshrine Cavern", short_name: "Serpentshrine", encounters: &[623, 624, 625, 626, 627, 628] },
+    RaidInstance { zone_id: 3845, name: "Tempest Keep", short_name: "Tempest Keep", encounters: &[730, 731, 732, 733] },
+    RaidInstance { zone_id: 3606, name: "Hyjal Summit", short_name: "Hyjal", encounters: &[618, 619, 620, 621, 622] },
+    RaidInstance { zone_id: 3959, name: "Black Temple", short_name: "Black Temple", encounters: &[601, 602, 603, 604, 605, 606, 607, 608, 609] },
+    RaidInstance { zone_id: 3805, name: "Zul'Aman", short_name: "Zul'Aman", encounters: &[1189, 1190, 1191, 1192, 1193, 1194] },
+    RaidInstance { zone_id: 4075, name: "Sunwell Plateau", short_name: "Sunwell", encounters: &[724, 725, 726, 727, 728, 729] },
+    // Wrath of the Lich King
+    RaidInstance { zone_id: 3456, name: "Naxxramas", short_name: "Naxxramas", encounters: &[1107, 1110, 1116, 1117, 1112, 1115, 1113, 1109, 1121, 1118, 1111, 1108, 1120, 1119, 1114] },
+    RaidInstance { zone_id: 4500, name: "Eye of Eternity", short_name: "EoE", encounters: &[1094, 734] },
+    RaidInstance { zone_id: 4493, name: "Obsidian Sanctum", short_name: "OS", encounters: &[1093, 1092, 1091, 1090, 742] },
+    RaidInstance { zone_id: 4603, name: "Vault of Archavon", short_name: "VoA", encounters: &[1126, 1127, 1128, 1129, 772] },
+    RaidInstance { zone_id: 4273, name: "Ulduar", short_name: "Ulduar", encounters: &[1132, 1136, 1139, 1142, 1140, 1137, 1131, 1135, 1141, 1164, 1165, 1166, 1133, 1138, 1134, 1143, 1130, 744, 745, 746, 747, 748, 749, 750, 751, 752, 753, 754, 755, 756, 757] },
+    RaidInstance { zone_id: 4722, name: "Trial of the Crusader", short_name: "ToC", encounters: &[1088, 1087, 1086, 1089, 1085, 629, 633, 637, 641, 645] },
+    RaidInstance { zone_id: 4812, name: "Icecrown Citadel", short_name: "ICC", encounters: &[1101, 1100, 1099, 1096, 1104, 1097, 1102, 1095, 1103, 1098, 1105, 1106] },
+    RaidInstance { zone_id: 4987, name: "Ruby Sanctum", short_name: "RS", encounters: &[1147, 1149, 1148, 1150] },
+    // Cataclysm
+    RaidInstance { zone_id: 5600, name: "Baradin Hold", short_name: "Baradin Hold", encounters: &[1033, 1250, 1332] },
+    RaidInstance { zone_id: 5094, name: "Blackwing Descent", short_name: "Blackwing Descent", encounters: &[1027, 1024, 1022, 1023, 1025, 1026] },
+    RaidInstance { zone_id: 5334, name: "The Bastion of Twilight", short_name: "Bastion of Twilight", encounters: &[1030, 1032, 1028, 1029, 1082, 1083] },
+    RaidInstance { zone_id: 5638, name: "Throne of the Four Winds", short_name: "Four Winds", encounters: &[1035, 1034] },
+    RaidInstance { zone_id: 5723, name: "Firelands", short_name: "Firelands", encounters: &[1197, 1204, 1205, 1206, 1200, 1185, 1203] },
+    RaidInstance { zone_id: 5892, name: "Dragon Soul", short_name: "Dragon Soul", encounters: &[1292, 1294, 1295, 1296, 1297, 1298, 1291, 1299] },
+    // Mists of Pandaria
+    RaidInstance { zone_id: 6125, name: "Mogu'shan Vaults", short_name: "Mogu'shan Vaults", encounters: &[1395, 1390, 1434, 1436, 1500, 1407] },
+    RaidInstance { zone_id: 6297, name: "Heart of Fear", short_name: "Heart of Fear", encounters: &[1507, 1504, 1463, 1498, 1499, 1501] },
+    RaidInstance { zone_id: 6067, name: "Terrace of Endless Spring", short_name: "Terrace", encounters: &[1409, 1505, 1506, 1431] },
+    RaidInstance { zone_id: 6622, name: "Throne of Thunder", short_name: "Throne of Thunder", encounters: &[1577, 1575, 1570, 1565, 1578, 1573, 1572, 1574, 1576, 1559, 1560, 1579, 1580, 1581] },
+    RaidInstance { zone_id: 6738, name: "Siege of Orgrimmar", short_name: "Siege of Orgrimmar", encounters: &[1602, 1598, 1624, 1604, 1622, 1600, 1606, 1603, 1595, 1594, 1599, 1601, 1593, 1623, 1605] },
+    // Warlords of Draenor
+    RaidInstance { zone_id: 6996, name: "Highmaul", short_name: "Highmaul", encounters: &[1721, 1706, 1720, 1722, 1719, 1723, 1705] },
+    RaidInstance { zone_id: 6967, name: "Blackrock Foundry", short_name: "Foundry", encounters: &[1696, 1691, 1693, 1694, 1689, 1692, 1690, 1713, 1695, 1704] },
+    RaidInstance { zone_id: 7545, name: "Hellfire Citadel", short_name: "Hellfire Citadel", encounters: &[1778, 1785, 1787, 1798, 1786, 1783, 1788, 1794, 1777, 1800, 1784, 1795, 1799] },
+    // Legion
+    RaidInstance { zone_id: 8026, name: "The Emerald Nightmare", short_name: "Emerald Nightmare", encounters: &[1853, 1841, 1873, 1854, 1876, 1877, 1864] },
+    RaidInstance { zone_id: 8440, name: "Trial of Valor", short_name: "Trial of Valor", encounters: &[1958, 1962, 2008] },
+    RaidInstance { zone_id: 8025, name: "The Nighthold", short_name: "Nighthold", encounters: &[1849, 1865, 1867, 1871, 1862, 1886, 1842, 1863, 1872, 1866] },
+    RaidInstance { zone_id: 8524, name: "Tomb of Sargeras", short_name: "Tomb of Sargeras", encounters: &[2032, 2048, 2036, 2050, 2037, 2054, 2052, 2038, 2051] },
+    RaidInstance { zone_id: 8638, name: "Antorus, the Burning Throne", short_name: "Antorus", encounters: &[2076, 2074, 2064, 2070, 2075, 2082, 2088, 2069, 2073, 2063, 2092] },
+    // Battle for Azeroth
+    RaidInstance { zone_id: 9389, name: "Uldir", short_name: "Uldir", encounters: &[2144, 2141, 2136, 2128, 2134, 2145, 2135, 2122] },
+    RaidInstance { zone_id: 10076, name: "Battle of Dazar'alor", short_name: "Dazar'alor", encounters: &[2265, 2263, 2266, 2285, 2284, 2271, 2268, 2272, 2276, 2280, 2281] },
+    RaidInstance { zone_id: 10057, name: "Crucible of Storms", short_name: "Crucible", encounters: &[2269, 2273] },
+    RaidInstance { zone_id: 10425, name: "The Eternal Palace", short_name: "Eternal Palace", encounters: &[2298, 2305, 2289, 2304, 2303, 2311, 2293, 2299] },
+    RaidInstance { zone_id: 10522, name: "Ny'alotha, the Waking City", short_name: "Ny'alotha", encounters: &[2329, 2334, 2327, 2328, 2336, 2333, 2331, 2335, 2343, 2345, 2337, 2344] },
+    // Shadowlands
+    RaidInstance { zone_id: 13224, name: "Castle Nathria", short_name: "Nathria", encounters: &[2398, 2418, 2402, 2383, 2405, 2406, 2412, 2399, 2417, 2407] },
+    RaidInstance { zone_id: 13561, name: "Sanctum of Domination", short_name: "Sanctum", encounters: &[2423, 2433, 2429, 2434, 2432, 2430, 2436, 2431, 2422, 2435] },
+    RaidInstance { zone_id: 13742, name: "Sepulcher of the First Ones", short_name: "Sepulcher", encounters: &[2512, 2540, 2553, 2544, 2542, 2529, 2539, 2546, 2543, 2549, 2537] },
+    // Dragonflight
+    RaidInstance { zone_id: 14030, name: "Vault of the Incarnates", short_name: "Vault", encounters: &[2587, 2590, 2635, 2639, 2592, 2605, 2614, 2607] },
     RaidInstance { zone_id: 14663, name: "Aberrus, the Shadowed Crucible", short_name: "Aberrus", encounters: &[2688, 2687, 2693, 2682, 2680, 2689, 2683, 2684, 2685] },
+    RaidInstance { zone_id: 14643, name: "Amirdrassil, the Dream's Hope", short_name: "Amirdrassil", encounters: &[2820, 2709, 2737, 2731, 2728, 2708, 2824, 2786, 2677] },
+    // The War Within
+    RaidInstance { zone_id: 14980, name: "Nerub-ar Palace", short_name: "Nerub-ar Palace", encounters: &[2902, 2917, 2898, 2918, 2919, 2920, 2921, 2922] },
+    RaidInstance { zone_id: 15913, name: "Blackrock Depths", short_name: "Blackrock Depths", encounters: &[3042, 3044, 3043, 3046, 3048, 3045, 3047, 3049] },
+    RaidInstance { zone_id: 15522, name: "Liberation of Undermine", short_name: "Undermine", encounters: &[3009, 3010, 3011, 3012, 3013, 3014, 3015, 3016] },
+    RaidInstance { zone_id: 16178, name: "Manaforge Omega", short_name: "Manaforge", encounters: &[3129, 3131, 3130, 3132, 3122, 3133, 3134, 3135] },
+    // Midnight
     RaidInstance { zone_id: 16279, name: "Sporefall", short_name: "Sporefall", encounters: &[3159] },
-    RaidInstance { zone_id: 3456, name: "Naxxramas", short_name: "Naxxramas", encounters: &[1107, 1110, 1116, 1118, 1117, 1112, 1115, 1113, 1109, 1121, 1119, 1120, 1114, 1111, 1108] },
-    RaidInstance { zone_id: 4500, name: "Eye of Eternity", short_name: "EoE", encounters: &[734] },
-    RaidInstance { zone_id: 4493, name: "Obsidian Sanctum", short_name: "OS", encounters: &[742] },
-    RaidInstance { zone_id: 4603, name: "Vault of Archavon", short_name: "VoA", encounters: &[772] },
-    RaidInstance { zone_id: 4273, name: "Ulduar", short_name: "Ulduar", encounters: &[744, 745, 746, 747, 748, 749, 750, 751, 752, 753, 754, 755, 756, 757] },
-    RaidInstance { zone_id: 4722, name: "Trial of the Crusader", short_name: "ToC", encounters: &[629, 633, 637, 641, 645] },
+    RaidInstance { zone_id: 16340, name: "The Voidspire", short_name: "Voidspire", encounters: &[3176, 3177, 3179, 3178, 3180, 3181] },
+    RaidInstance { zone_id: 16531, name: "The Dreamrift", short_name: "Dreamrift", encounters: &[3306] },
+    RaidInstance { zone_id: 16342, name: "March on Quel'Danas", short_name: "Quel'Danas", encounters: &[3182, 3183] },
+    RaidInstance { zone_id: 16915, name: "The Venomous Abyss", short_name: "Venomous Abyss", encounters: &[3470, 3445, 3497, 3455, 3420, 3421, 3429, 3492] },
+    RaidInstance { zone_id: 16671, name: "The Tidebound Grotto", short_name: "Tidebound Grotto", encounters: &[3379] },
+    RaidInstance { zone_id: 17059, name: "The Unbinding of Kith'ix", short_name: "Kith'ix", encounters: &[3513] },
 ];
 
-pub(super) fn raid_lookup(encounter_id: u32) -> &'static RaidInstance {
+fn known_raid(encounter_id: u32) -> Option<&'static RaidInstance> {
     RAID_INSTANCES
         .iter()
         .find(|raid| raid.encounters.contains(&encounter_id))
-        .unwrap_or(&UNKNOWN_RAID)
+}
+
+pub(super) fn raid_lookup(encounter_id: u32) -> &'static RaidInstance {
+    known_raid(encounter_id).unwrap_or(&UNKNOWN_RAID)
 }
 
 pub(super) fn raid_zone_id(encounter_id: u32) -> u32 {
     raid_lookup(encounter_id).zone_id
 }
 
+/// The raid an encounter belongs to, as the library shows it.
+pub(crate) fn raid_short_name(encounter_id: u32) -> Option<&'static str> {
+    known_raid(encounter_id).map(|raid| raid.short_name)
+}
+
 pub(super) static CURRENT_RETAIL_ENCOUNTERS: &[u32] = &[
     3176, 3177, 3178, 3179, 3180, 3181, 3182, 3183, 3306, 3159, 3470, 3445, 3455, 3497, 3420, 3421,
-    3429, 3492, 3379, 9999,
+    3429, 3492, 3379, 3513, 9999,
 ];
 
 #[rustfmt::skip]
@@ -235,7 +312,7 @@ static DUNGEON_TIMERS: &[(u32, [f64; 3])] = &[
     (392, [1800.0, 1440.0, 1080.0]),
     (169, [1800.0, 1440.0, 1080.0]),
     (166, [1800.0, 1440.0, 1080.0]),
-    (399, [1800.0, 1440.0, 1080.0]),
+    (399, [1680.0, 1344.0, 1008.0]),
     (400, [2400.0, 1920.0, 1440.0]),
     (401, [2250.0, 1800.0, 1350.0]),
     (200, [2280.0, 1824.0, 1428.0]),
@@ -279,13 +356,13 @@ static DUNGEON_TIMERS: &[(u32, [f64; 3])] = &[
     (556, [1800.0, 1440.0, 1080.0]),
     (239, [2040.0, 1632.0, 1224.0]),
     (161, [1680.0, 1356.0, 1002.0]),
-    (587, [1800.0, 1440.0, 1080.0]),
-    (586, [1800.0, 1440.0, 1080.0]),
+    (587, [2040.0, 1632.0, 1224.0]),
+    (586, [1920.0, 1536.0, 1152.0]),
     (584, [1800.0, 1440.0, 1080.0]),
     (585, [1800.0, 1440.0, 1080.0]),
     (588, [1800.0, 1440.0, 1080.0]),
-    (250, [1800.0, 1440.0, 1080.0]),
-    (249, [1800.0, 1440.0, 1080.0]),
+    (250, [1920.0, 1536.0, 1152.0]),
+    (249, [1980.0, 1584.0, 1188.0]),
 ];
 
 pub(super) fn dungeon_timers(map_id: u32) -> Option<&'static [f64]> {
@@ -331,13 +408,16 @@ static RETAIL_BATTLEGROUNDS: &[(u32, &str)] = &[
     (968, "Eye of the Storm"), (628, "Isle of Conquest"), (1803, "Seething Shore"),
     (727, "Silvershard Mines"), (998, "Temple of Kotmogu"), (761, "The Battle for Gilneas"),
     (726, "Twin Peaks"), (489, "Warsong Gulch"), (2106, "Warsong Gulch"),
-    (2656, "Deephaul Ravine"), (2188, "Wintergrasp"),
+    (2656, "Deephaul Ravine"), (2188, "Wintergrasp"), (2118, "Wintergrasp"),
+    (1191, "Ashran"), (2799, "Slayer's Rise"),
 ];
 
 #[rustfmt::skip]
 static CLASSIC_BATTLEGROUNDS: &[(u32, &str)] = &[
     (30, "Alterac Valley"), (529, "Arathi Basin"), (566, "Eye of the Storm"),
-    (607, "Strand of the Ancients"), (489, "Warsong Gulch"),
+    (607, "Strand of the Ancients"), (489, "Warsong Gulch"), (628, "Isle of Conquest"),
+    (726, "Twin Peaks"), (727, "Silvershard Mines"), (761, "The Battle for Gilneas"),
+    (968, "Eye of the Storm"), (998, "Temple of Kotmogu"), (1105, "Deepwind Gorge"),
 ];
 
 #[rustfmt::skip]
@@ -354,6 +434,7 @@ static RETAIL_ARENAS: &[(u32, &str)] = &[
 static CLASSIC_ARENAS: &[(u32, &str)] = &[
     (572, "Ruins of Lordaeron"), (559, "Nagrand"), (617, "Dalaran"),
     (562, "Blade's Edge"), (1134, "Tiger's Peak"), (980, "Tol'viron"),
+    (618, "Ring of Valor"),
 ];
 
 fn lookup(table: &[(u32, &'static str)], id: u32) -> Option<&'static str> {
@@ -580,4 +661,21 @@ pub(super) fn md5_hex(input: &[u8]) -> String {
         }
     }
     digest
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_raid_encounter_names_one_raid() {
+        let mut seen = std::collections::HashSet::new();
+        for raid in RAID_INSTANCES {
+            for encounter in raid.encounters {
+                assert!(seen.insert(*encounter), "{encounter} is in two raids");
+            }
+        }
+        assert_eq!(raid_short_name(3492), Some("Venomous Abyss"));
+        assert_eq!(raid_short_name(1), None);
+    }
 }

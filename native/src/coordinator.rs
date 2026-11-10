@@ -2094,8 +2094,14 @@ fn test_events(
             },
         ),
         Category::Battlegrounds => (
-            CombatEvent::ZoneChanged { zone_id: 30 },
-            CombatEvent::ZoneChanged { zone_id: 0 },
+            CombatEvent::ZoneChanged {
+                zone_id: 30,
+                difficulty_id: 0,
+            },
+            CombatEvent::ZoneChanged {
+                zone_id: 0,
+                difficulty_id: 0,
+            },
         ),
         Category::MythicPlus => (
             CombatEvent::ChallengeStarted {

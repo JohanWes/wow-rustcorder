@@ -32,7 +32,6 @@ use crate::parser::{
 
 mod tables;
 
-pub(crate) use tables::instance_name;
 use tables::{
     CURRENT_RETAIL_ENCOUNTERS, PartyType, arena_zone_name, battleground_name, classic_arena_name,
     classic_battleground_name, classic_unique_aura, classic_unique_spec, difficulty_info,
@@ -40,6 +39,7 @@ use tables::{
     mop_challenge_mode_name, mop_challenge_mode_timers, raid_lookup, raid_zone_id,
     retail_battleground_name, retail_unique_spec,
 };
+pub(crate) use tables::{instance_name, raid_short_name};
 
 const RAID_DEFAULT_OVERRUN_MS: u64 = 3_000;
 const PVP_DEFAULT_OVERRUN_MS: u64 = 3_000;
@@ -47,6 +47,8 @@ const MIN_RETAIL_BOSS_HP: u64 = 100_000_000;
 const CHALLENGERS_PERIL_AFFIX: u32 = 152;
 const CHALLENGERS_PERIL_ADJUST_MS: i64 = 90_000;
 const MIN_FINAL_SEGMENT_MS: i64 = 10_000;
+/// Difficulty every zone change reports while a keystone run is in progress.
+const KEYSTONE_DIFFICULTY_ID: u32 = 8;
 const DEATH_MARKER_BACK_OFFSET_MS: i64 = 2;
 const BELOREN_ENCOUNTER_ID: u32 = 3182;
 const ALLERIA_ENCOUNTER_ID: u32 = 3181;
@@ -413,7 +415,18 @@ fn handle_event(
     actions: &mut Vec<ActivityAction>,
 ) {
     match event {
-        CombatEvent::ZoneChanged { zone_id } => {
+        CombatEvent::ZoneChanged {
+            zone_id,
+            difficulty_id,
+        } => {
+            if rules == Rules::Retail
+                && left_challenge(state.active.as_ref(), *zone_id, *difficulty_id)
+            {
+                // Same ending as the CHALLENGE_MODE_END the game only logs
+                // once the next key starts.
+                handle_challenge_end(state, rules, false, 0, at_ms, config, finished, actions);
+                return;
+            }
             handle_zone_change(state, rules, *zone_id, at_ms, config, finished, actions);
         }
         CombatEvent::EncounterStarted {
@@ -793,6 +806,17 @@ fn active_zone_id(active: &ActiveActivity) -> Option<u32> {
     }
 }
 
+/// A key in progress always reports the keystone difficulty, also after
+/// walking out and back in. Entering its dungeon at any other difficulty means
+/// the group gave the key up and reset the instance.
+fn left_challenge(active: Option<&ActiveActivity>, zone_id: u32, difficulty_id: u32) -> bool {
+    matches!(
+        active.map(|active| &active.kind),
+        Some(ActiveKind::Challenge(challenge))
+            if challenge.zone_id == zone_id && difficulty_id != KEYSTONE_DIFFICULTY_ID
+    )
+}
+
 fn is_arena_category(category: &Category) -> bool {
     matches!(
         category,
@@ -893,7 +917,9 @@ fn handle_encounter_start(
     actions: &mut Vec<ActivityAction>,
 ) {
     if rules == Rules::Retail {
-        let known_dungeon = dungeon_encounter_name(encounter_id).is_some();
+        // The difficulty covers dungeon bosses the table has no name for.
+        let known_dungeon = dungeon_encounter_name(encounter_id).is_some()
+            || difficulty_info(difficulty_id).is_some_and(|info| info.party == PartyType::Party);
         if state.active.is_none() && known_dungeon {
             // Regular dungeon, or a Mythic+ below the recording threshold.
             return;
@@ -2143,17 +2169,21 @@ fn build_draft(active: ActiveActivity, outcome: Outcome, ended_at_ms: i64) -> Re
     }
 }
 
-/// GUID-to-name map for pet-owner merge naming, from the same combatant map
-/// the summaries use.
+/// GUID-to-name map for meter rows whose own events never named them (pet
+/// owners, supporters), from the same combatant map the summaries use. Names
+/// are put back in the log's `Name-Realm-Region` form, so a player reads the
+/// same in every fight.
 fn combatant_names(active: &ActiveActivity) -> HashMap<String, String> {
     roster(active)
         .0
         .iter()
         .filter_map(|combatant| {
-            combatant
-                .name
-                .clone()
-                .map(|name| (combatant.guid.clone(), name))
+            let mut name = combatant.name.clone()?;
+            for part in [&combatant.realm, &combatant.region].into_iter().flatten() {
+                name.push('-');
+                name.push_str(part);
+            }
+            Some((combatant.guid.clone(), name))
         })
         .collect()
 }
@@ -2727,7 +2757,7 @@ mod tests {
             assert_eq!(begins(&actions), 1, "map {map_id} was not recordable");
         }
 
-        for encounter_id in [3470, 3445, 3455, 3497, 3420, 3421, 3429, 3492, 3379] {
+        for encounter_id in [3470, 3445, 3455, 3497, 3420, 3421, 3429, 3492, 3379, 3513] {
             let mut engine = Engine::new(GameFlavor::Retail);
             engine.config.current_raid_only = true;
             let actions = engine.feed(0, encounter_start(encounter_id, "Midnight Season 2", 16));
@@ -2893,6 +2923,65 @@ mod tests {
     }
 
     #[test]
+    fn retail_key_ends_on_coming_back_to_a_reset_dungeon() {
+        let zone = |zone_id, difficulty_id| CombatEvent::ZoneChanged {
+            zone_id,
+            difficulty_id,
+        };
+        let mut engine = Engine::new(GameFlavor::Retail);
+        let begin = engine.feed(
+            0,
+            CombatEvent::ChallengeStarted {
+                zone_id: 2526,
+                map_id: 402,
+                level: 10,
+                affixes: vec![9],
+            },
+        );
+        let ActivityAction::Begin { draft } = &begin[0] else {
+            panic!("expected Begin, got {begin:?}");
+        };
+        let id = draft.id.clone();
+        engine.feed(100, combatant("Player-1-A", Some(0), Some(71)));
+        engine.feed(
+            200,
+            cast("Player-1-A", "Alpha-Realm", SELF_FLAGS, "Mortal Strike"),
+        );
+        // Walking out of a running key and back in keeps it going.
+        assert!(engine.feed(60_000, zone(2444, 0)).is_empty());
+        assert!(engine.feed(75_000, zone(2526, 8)).is_empty());
+        assert!(engine.feed(300_000, zone(2444, 0)).is_empty());
+        let end = engine.feed(320_000, zone(2526, 23));
+        assert_eq!(end, vec![ActivityAction::Complete { id: id.clone() }]);
+        let finished = engine.take_finished(&id).unwrap();
+        assert_eq!(finished.outcome, Some(Outcome::Abandoned));
+        assert_eq!(finished.ended_at_ms, Some(320_000));
+    }
+
+    #[test]
+    fn retail_key_survives_a_boss_missing_from_the_table() {
+        let mut engine = Engine::new(GameFlavor::Retail);
+        engine.feed(
+            0,
+            CombatEvent::ChallengeStarted {
+                zone_id: 2526,
+                map_id: 402,
+                level: 10,
+                affixes: vec![9],
+            },
+        );
+        let pull = engine.feed(
+            60_000,
+            CombatEvent::EncounterStarted {
+                encounter_id: 4_000_000,
+                name: "New Boss".to_string(),
+                difficulty_id: KEYSTONE_DIFFICULTY_ID,
+            },
+        );
+        assert!(pull.is_empty(), "the key was ended: {pull:?}");
+    }
+
+    #[test]
     fn retail_arena_win_and_loss() {
         for (winning_team, expected) in [(0u32, Outcome::Win), (1u32, Outcome::Loss)] {
             let mut engine = Engine::new(GameFlavor::Retail);
@@ -3025,7 +3114,13 @@ mod tests {
     #[test]
     fn retail_battleground_estimates_result_from_deaths() {
         let mut engine = Engine::new(GameFlavor::Retail);
-        let actions = engine.feed(0, CombatEvent::ZoneChanged { zone_id: 30 });
+        let actions = engine.feed(
+            0,
+            CombatEvent::ZoneChanged {
+                zone_id: 30,
+                difficulty_id: 0,
+            },
+        );
         let ActivityAction::Begin { draft, .. } = &actions[0] else {
             panic!("expected Begin");
         };
@@ -3043,7 +3138,13 @@ mod tests {
         ] {
             engine.feed(at_ms, died(guid, name, flags));
         }
-        let end = engine.feed(600_000, CombatEvent::ZoneChanged { zone_id: 1 });
+        let end = engine.feed(
+            600_000,
+            CombatEvent::ZoneChanged {
+                zone_id: 1,
+                difficulty_id: 0,
+            },
+        );
         assert_eq!(end, vec![ActivityAction::Complete { id: id.clone() }]);
         let finished = engine.take_finished(&id).unwrap();
         assert_eq!(finished.outcome, Some(Outcome::Loss));
@@ -3085,7 +3186,13 @@ mod tests {
     #[test]
     fn classic_arena_death_driven_end() {
         let mut engine = Engine::new(GameFlavor::Classic);
-        let actions = engine.feed(0, CombatEvent::ZoneChanged { zone_id: 559 });
+        let actions = engine.feed(
+            0,
+            CombatEvent::ZoneChanged {
+                zone_id: 559,
+                difficulty_id: 0,
+            },
+        );
         assert_eq!(begins(&actions), 1);
         let ActivityAction::Begin { draft, .. } = &actions[0] else {
             panic!("expected Begin");
@@ -3200,7 +3307,13 @@ mod tests {
         engine.feed(0, encounter_start(2587, "Eranog", 16));
         // A classic battleground begins its own activity.
         engine.flavor = GameFlavor::Classic;
-        let classic = engine.feed(1_000, CombatEvent::ZoneChanged { zone_id: 30 });
+        let classic = engine.feed(
+            1_000,
+            CombatEvent::ZoneChanged {
+                zone_id: 30,
+                difficulty_id: 0,
+            },
+        );
         assert_eq!(begins(&classic), 1);
         engine.flavor = GameFlavor::Unknown("ptr_x".to_string());
         let unknown = engine.feed(2_000, encounter_end(16, true));
