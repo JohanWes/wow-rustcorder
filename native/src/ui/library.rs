@@ -978,12 +978,16 @@ impl Inner {
         let ids = viewpoint_ids(&selected);
         let primaries: Vec<RecordingId> = selected.iter().map(|row| row.id.clone()).collect();
         let rows = selected.len();
+        // Viewpoints only get a mention when the selection has extra ones.
+        let viewpoints = if ids.len() > rows {
+            format!(" and all {} viewpoint files", ids.len())
+        } else {
+            String::new()
+        };
         let body = format!(
-            "Delete {rows} recording{} and their {} viewpoint file{}? This permanently \
-             removes the media files and their metadata sidecars.",
+            "Delete {rows} recording{}{viewpoints}? This permanently removes the media \
+             files and their metadata sidecars.",
             plural(rows),
-            ids.len(),
-            plural(ids.len()),
         );
         let dialog = adw::AlertDialog::new(Some("Delete recordings"), Some(&body));
         dialog.add_response("cancel", "Cancel");

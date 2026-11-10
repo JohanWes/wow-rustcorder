@@ -464,8 +464,13 @@ impl Storage {
     fn delete_one(&self, entry: &LibraryEntry, wait_for_release: bool) -> Result<(), String> {
         self.check_owned(&entry.media_path)?;
         self.check_owned(&entry.sidecar_path)?;
-        remove_media(&entry.media_path, wait_for_release)
-            .map_err(|error| format!("media: {error}"))?;
+        match remove_media(&entry.media_path, wait_for_release) {
+            Ok(()) => {}
+            // Media removed behind the app's back: still drop the sidecar, or
+            // the entry can never be deleted and is orphaned on the next scan.
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("media: {error}")),
+        }
         match fs::remove_file(&entry.sidecar_path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -554,8 +559,8 @@ impl Storage {
                 Err(error) => {
                     // `delete_one` unlinks the media before the sidecar and
                     // tags which stage failed. Only a sidecar failure means
-                    // the media is actually gone; a media failure (already
-                    // missing, not owned, a symlink) freed nothing, and
+                    // the media is actually gone; a media failure (not owned,
+                    // a symlink, in use) freed nothing, and
                     // probing `exists()` cannot tell those apart. Credit the
                     // space for the real case rather than evicting more, and
                     // make the caller rescan.
@@ -2597,15 +2602,13 @@ mod tests {
         fs::write(&outside.media_path, "outside").expect("outside");
 
         let result = storage.delete(&[good.clone(), missing.clone(), outside.clone()]);
-        assert_eq!(result.deleted, vec![good.id.clone()]);
-        assert_eq!(result.failures.len(), 2);
-        assert!(result.failures[0].1.contains("media"));
-        assert!(result.failures[1].1.contains("not a direct child"));
+        // Media that was already gone does not strand its sidecar.
+        assert_eq!(result.deleted, vec![good.id.clone(), missing.id.clone()]);
+        assert_eq!(result.failures.len(), 1);
+        assert!(result.failures[0].1.contains("not a direct child"));
         assert!(!good.media_path.exists() && !good.sidecar_path.exists());
+        assert!(!missing.sidecar_path.exists());
         assert!(outside.media_path.exists());
-
-        // The sidecar of a partially removed entry stays for the next scan.
-        assert!(missing.sidecar_path.exists());
     }
 
     #[test]
