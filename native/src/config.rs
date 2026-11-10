@@ -117,6 +117,7 @@ impl FlavorSettings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ActivitySettings {
     pub record_raids: bool,
     pub record_dungeons: bool,
@@ -172,6 +173,7 @@ impl ActivitySettings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct StorageSettings {
     pub recording_dir: AuthorizedPath,
     pub limit: StorageLimit,
@@ -187,6 +189,7 @@ impl Default for StorageSettings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CaptureSettings {
     pub fps: u32,
     pub codec: Codec,
@@ -225,6 +228,7 @@ impl Default for CaptureSettings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ManualSettings {
     pub enabled: bool,
     pub sound: bool,
@@ -251,6 +255,7 @@ pub struct LayoutSettings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct InterfaceSettings {
     pub hide_empty_categories: bool,
     pub death_markers: DeathMarkerVisibility,
@@ -262,11 +267,8 @@ pub struct InterfaceSettings {
     pub start_minimized: bool,
     /// Launch at login: the Run registry key on Windows, the Background
     /// portal (or an autostart desktop file outside Flatpak) on Linux.
-    #[serde(default)]
     pub start_with_system: bool,
-    #[serde(default)]
     pub theme: Theme,
-    #[serde(default)]
     pub layout: LayoutSettings,
 }
 
@@ -289,8 +291,9 @@ impl Default for InterfaceSettings {
     }
 }
 
-/// Keys missing from the file take their defaults, so a hand-edited or older
-/// config is not rejected over one absent field.
+/// Keys missing from the file take their defaults, here and in each settings
+/// group, so a hand-edited or older config is not rejected over one absent
+/// field.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -833,6 +836,24 @@ mod tests {
             PathAuthorization::ImportedInactive
         );
         assert!(migrated.flavors.retail.log_dir.is_authorized());
+    }
+
+    #[test]
+    fn keys_missing_inside_a_settings_group_take_their_defaults() {
+        let config: Config =
+            serde_json::from_str(r#"{"activities": {"record_raids": false}, "capture": {}}"#)
+                .expect("partial config");
+        assert_eq!(
+            config,
+            Config {
+                activities: ActivitySettings {
+                    record_raids: false,
+                    ..ActivitySettings::default()
+                },
+                last_seen_version: String::new(),
+                ..Config::default()
+            }
+        );
     }
 
     #[test]
